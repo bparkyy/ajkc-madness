@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Japan Kendo Championship Bracket</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .user-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            width: 200px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button.secondary {
+            background: #48bb78;
+        }
+
+        button.secondary:hover {
+            background: #38a169;
+        }
+
+        button.danger {
+            background: #f56565;
+        }
+
+        button.danger:hover {
+            background: #e53e3e;
+        }
+
+        .bracket-container {
+            overflow-x: auto;
+            margin-top: 30px;
+        }
+
+        .bracket {
+            display: flex;
+            gap: 40px;
+            min-width: 1200px;
+            padding: 20px;
+        }
+
+        .round {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+        }
+
+        .round-title {
+            text-align: center;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+
+        .matchup {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 10px 0;
+            padding: 8px;
+            position: relative;
+        }
+
+        .matchup::after {
+            content: '';
+            position: absolute;
+            right: -40px;
+            top: 50%;
+            width: 40px;
+            height: 2px;
+            background: #cbd5e0;
+        }
+
+        .round:last-child .matchup::after {
+            display: none;
+        }
+
+        .bracket-line {
+            position: absolute;
+            background: #cbd5e0;
+        }
+
+        .player {
+            padding: 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            margin: 2px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .player:hover {
+            background: #edf2f7;
+        }
+
+        .player.selected {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+
+        .player.correct {
+            background: #48bb78;
+            color: white;
+        }
+
+        .player.incorrect {
+            background: #f56565;
+            color: white;
+        }
+
+        .player-name {
+            flex: 1;
+            font-weight: 600;
+        }
+
+        .prefecture {
+            font-size: 0.8em;
+            opacity: 0.7;
+            margin-left: 8px;
+        }
+
+        .seed {
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-right: 8px;
+            font-weight: bold;
+        }
+
+        .leaderboard {
+            margin-top: 40px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 8px;
+        }
+
+        .leaderboard h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .leaderboard-entry {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px;
+            background: white;
+            margin: 8px 0;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+        }
+
+        .leaderboard-entry.top {
+            border-left-color: #f6ad55;
+            font-weight: 600;
+        }
+
+        .rank {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 40px;
+        }
+
+        .instructions {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            color: #555;
+        }
+
+        .mode-indicator {
+            text-align: center;
+            padding: 10px;
+            background: #edf2f7;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close {
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .bracket-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bracket-item {
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .bracket-item:hover {
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+
+        .bracket-info {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .bracket-name {
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        .bracket-date {
+            font-size: 0.85em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>All Japan Kendo Championship Bracket</h1>
+
+        <div class="instructions">
+            <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, an admin can enter them to see who predicted best!
+        </div>
+
+        <div class="controls">
+            <div class="user-input">
+                <input type="text" id="userName" placeholder="Enter your name" />
+                <button onclick="app.saveBracket()">💾 Save My Bracket</button>
+            </div>
+            <button onclick="app.viewAllBrackets()">👥 View All Brackets</button>
+            <button onclick="app.toggleAdminMode()">⚙️ Admin Mode</button>
+            <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn" style="display: none;">🏆 View Leaderboard</button>
+        </div>
+
+        <div id="modeIndicator" class="mode-indicator" style="display: none;">
+            <span id="modeText"></span>
+            <button class="danger" onclick="app.clearAll()" style="margin-left: 20px;">🗑️ Clear All Data</button>
+        </div>
+
+        <div class="bracket-container">
+            <div class="bracket" id="bracket"></div>
+        </div>
+
+        <div class="leaderboard" id="leaderboard" style="display: none;">
+            <h2>🏆 Leaderboard</h2>
+            <div id="leaderboardContent"></div>
+        </div>
+    </div>
+
+    <!-- Modal for viewing all brackets -->
+    <div id="bracketsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>All Saved Brackets</h2>
+                <span class="close" onclick="app.closeModal()">&times;</span>
+            </div>
+            <div id="bracketsList" class="bracket-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            players: [],
+            bracket: {},
+            adminMode: false,
+            currentUser: '',
+            
+            init() {
+                this.generatePlayers();
+                this.loadFromStorage();
+                this.renderBracket();
+                this.updateLeaderboard();
+            },
+
+            generatePlayers() {
+                const players = [
+                    // Left side of bracket (32 players)
+                    { name: 'Y.KUROKAWA', prefecture: 'Kanagawa', seed: 5 },
+                    { name: 'T.CHIKAMOTO', prefecture: 'Aichi', seed: 5 },
+                    { name: 'Y.YAMADA', prefecture: 'Nara', seed: 'R6' },
+                    { name: 'Y.OKUMURA', prefecture: 'Hokkaido', seed: 5 },
+                    { name: 'H.SOMEYA', prefecture: 'Chiba', seed: 5 },
+                    { name: 'M.HATSUKANO', prefecture: 'Tottori', seed: 4 },
+                    { name: 'K.SHIMOKUBO', prefecture: 'Miyazaki', seed: 'R6' },
+                    { name: 'T.MORIMOTO', prefecture: 'Kagawa', seed: 'R6' },
+                    { name: 'K.SENDA', prefecture: 'Miyagi', seed: 5 },
+                    { name: 'R.KUNITOMO', prefecture: 'Fukuoka', seed: 'R6' },
+                    { name: 'Y.NAKANE', prefecture: 'Ibaraki', seed: 5 },
+                    { name: 'S.NISHIZAWA', prefecture: 'Nagano', seed: 5 },
+                    { name: 'Y.TAKENOCHI', prefecture: 'Tokyo', seed: 6 },
+                    { name: 'S.MAEDA', prefecture: 'Hyogo', seed: 6 },
+                    { name: 'Y.MATSUOKA', prefecture: 'Mie', seed: 5 },
+                    { name: 'R.KAMOI', prefecture: 'Okayama', seed: 5 },
+                    { name: 'T.UEZU', prefecture: 'Okinawa', seed: 'R7' },
+                    { name: 'K.TAKEMOTO', prefecture: 'Shiga', seed: 4 },
+                    { name: 'R.NATSUMEDA', prefecture: 'Hiroshima', seed: 4 },
+                    { name: 'H.HOSHINO', prefecture: 'Gunma', seed: 5 },
+                    { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', seed: 5 },
+                    { name: 'N.TASHIRO', prefecture: 'Fukuoka', seed: 4 },
+                    { name: 'Y.JITO', prefecture: 'Saitama', seed: 4 },
+                    { name: 'H.ISHIDA', prefecture: 'Yamagata', seed: 5 },
+                    { name: 'R.SEIKE', prefecture: 'Osaka', seed: 5 },
+                    { name: 'K.MUKUNASHI', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'T.TAKADA', prefecture: 'Aomori', seed: 'R6' },
+                    { name: 'K.KUSUNOKI', prefecture: 'Shimane', seed: 4 },
+                    { name: 'R.SUZUKI', prefecture: 'Chiba', seed: 4 },
+                    { name: 'E.KANASAKI', prefecture: 'Toyama', seed: 4 },
+                    { name: 'M.KUROKI', prefecture: 'Oita', seed: 5 },
+                    { name: 'T.MURAKAMI', prefecture: 'Ehime', seed: 'R6' },
+                    
+                    // Right side of bracket (32 players)
+                    { name: 'K.NAKAZAWA', prefecture: 'Kochi', seed: 'R6' },
+                    { name: 'S.MATSUI', prefecture: 'Tochigi', seed: 5 },
+                    { name: 'K.MATSUZAKI', prefecture: 'Ibaraki', seed: 5 },
+                    { name: 'T.NAGANO', prefecture: 'Hyogo', seed: 'R6' },
+                    { name: 'S.HAMASAKI', prefecture: 'Kagoshima', seed: 6 },
+                    { name: 'K.KUNIYASU', prefecture: 'Akita', seed: 5 },
+                    { name: 'K.OKA', prefecture: 'Saga', seed: 5 },
+                    { name: 'S.KANO', prefecture: 'Tokyo', seed: 6 },
+                    { name: 'K.KIMURA', prefecture: 'Osaka', seed: 5 },
+                    { name: 'H.SAKAMOTO', prefecture: 'Shimane', seed: 'R6' },
+                    { name: 'K.HASHIMOTO', prefecture: 'Saitama', seed: 'R7' },
+                    { name: 'K.HAYASHIDA', prefecture: 'Nagasaki', seed: 6 },
+                    { name: 'S.OTANI', prefecture: 'Fukushima', seed: 'R6' },
+                    { name: 'H.ABIRU', prefecture: 'Tokyo', seed: 4 },
+                    { name: 'Y.KUDAMATSU', prefecture: 'Aichi', seed: 5 },
+                    { name: 'M.TABATA', prefecture: 'Niigata', seed: 3 },
+                    { name: 'H.NISHIMURA', prefecture: 'Kumamoto', seed: 'R7' },
+                    { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', seed: 6 },
+                    { name: 'Y.NOMURA', prefecture: 'Kanagawa', seed: 'R7' },
+                    { name: 'T.YAMURA', prefecture: 'Yamaguchi', seed: 5 },
+                    { name: 'K.HORIURO', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'T.TSURUHAMA', prefecture: 'Osaka', seed: 2 },
+                    { name: 'Y.JITO', prefecture: 'Gifu', seed: 5 },
+                    { name: 'S.IZAWA', prefecture: 'Hokkaido', seed: 6 },
+                    { name: 'Y.SASAKI', prefecture: 'Chiba', seed: 5 },
+                    { name: 'R.NISHIDA', prefecture: 'Tokushima', seed: 6 },
+                    { name: 'S.OGURA', prefecture: 'Wakayama', seed: 5 },
+                    { name: 'M.FURUDATE', prefecture: 'Iwate', seed: 'R7' },
+                    { name: 'S.AREMATSU', prefecture: 'Saitama', seed: 6 },
+                    { name: 'S.TOMITA', prefecture: 'Fukui', seed: 6 },
+                    { name: 'R.GOYA', prefecture: 'Kyoto', seed: 'R6' },
+                    { name: 'R.IKEDA', prefecture: 'Fukuoka', seed: 4 }
+                ];
+
+                this.players = players.map((p, i) => ({
+                    id: i + 1,
+                    ...p
+                }));
+            },
+
+            saveBracket() {
+                const userName = document.getElementById('userName').value.trim();
+                if (!userName) {
+                    alert('Please enter your name!');
+                    return;
+                }
+
+                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
+                brackets[userName] = {
+                    predictions: this.bracket,
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem('brackets', JSON.stringify(brackets));
+                alert(`Bracket saved for ${userName}!`);
+                
+                // Clear name and bracket after saving
+                document.getElementById('userName').value = '';
+                this.bracket = {};
+                this.currentUser = '';
+                this.renderBracket();
+            },
+
+            toggleAdminMode() {
+                if (!this.adminMode) {
+                    // Trying to enter admin mode - require password
+                    const password = prompt('Enter admin password:');
+                    if (password !== 'kendo2025') {
+                        alert('Incorrect password!');
+                        return;
+                    }
+                    this.adminMode = true;
+                    
+                    // Clear name and bracket when entering admin mode
+                    document.getElementById('userName').value = '';
+                    this.currentUser = '';
+                    
+                    // Load actual results if they exist
+                    const actualResults = localStorage.getItem('actualResults');
+                    if (actualResults) {
+                        this.bracket = JSON.parse(actualResults);
+                    } else {
+                        this.bracket = {};
+                    }
+                } else {
+                    // Exiting admin mode
+                    this.adminMode = false;
+                    
+                    // Clear name and bracket when exiting admin mode
+                    document.getElementById('userName').value = '';
+                    this.bracket = {};
+                    this.currentUser = '';
+                }
+                
+                const indicator = document.getElementById('modeIndicator');
+                const modeText = document.getElementById('modeText');
+                if (this.adminMode) {
+                    modeText.textContent = '⚙️ ADMIN MODE - Enter Actual Results';
+                    indicator.style.display = 'flex';
+                    indicator.style.justifyContent = 'center';
+                    indicator.style.alignItems = 'center';
+                } else {
+                    indicator.style.display = 'none';
+                }
+                this.renderBracket();
+            },
+
+            clearAll() {
+                if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
+                    localStorage.clear();
+                    this.bracket = {};
+                    this.adminMode = false;
+                    document.getElementById('userName').value = '';
+                    this.renderBracket();
+                    this.updateLeaderboard();
+                    alert('All data cleared!');
+                }
+            },
+
+            loadFromStorage() {
+                const results = localStorage.getItem('actualResults');
+                if (results) {
+                    // Don't automatically show leaderboard, just make button available
+                    document.getElementById('leaderboardBtn').style.display = 'inline-block';
+                }
+            },
+
+            selectWinner(round, matchup, playerId) {
+                if (!this.bracket[round]) {
+                    this.bracket[round] = {};
+                }
+                this.bracket[round][matchup] = playerId;
+
+                if (this.adminMode) {
+                    localStorage.setItem('actualResults', JSON.stringify(this.bracket));
+                    this.updateLeaderboard();
+                }
+
+                this.renderBracket();
+            },
+
+            getRoundMatches(round) {
+                // Round 0 (Round of 64): 32 matches with 64 players
+                // Round 1 (Round of 32): 16 matches
+                // Round 2 (Round of 16): 8 matches
+                // Round 3 (Quarterfinals): 4 matches
+                // Round 4 (Semifinals): 2 matches
+                // Round 5 (Finals): 1 match
+                const matchCount = 32 / Math.pow(2, round);
+                const matches = [];
+
+                for (let i = 0; i < matchCount; i++) {
+                    if (round === 0) {
+                        matches.push({
+                            player1: this.players[i * 2],
+                            player2: this.players[i * 2 + 1]
+                        });
+                    } else {
+                        const prevRound = round - 1;
+                        const match1 = i * 2;
+                        const match2 = i * 2 + 1;
+                        
+                        const winner1 = this.bracket[prevRound]?.[match1];
+                        const winner2 = this.bracket[prevRound]?.[match2];
+
+                        matches.push({
+                            player1: winner1 ? this.players.find(p => p.id === winner1) : null,
+                            player2: winner2 ? this.players.find(p => p.id === winner2) : null
+                        });
+                    }
+                }
+
+                return matches;
+            },
+
+            renderBracket() {
+                const bracketDiv = document.getElementById('bracket');
+                const rounds = ['Round of 64', 'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals', 'Finals'];
+                
+                let html = '';
+
+                for (let round = 0; round < 6; round++) {
+                    const matches = this.getRoundMatches(round);
+                    html += `<div class="round">`;
+                    html += `<div class="round-title">${rounds[round]}</div>`;
+
+                    matches.forEach((match, matchIndex) => {
+                        html += `<div class="matchup">`;
+                        
+                        if (match.player1) {
+                            const isSelected = this.bracket[round]?.[matchIndex] === match.player1.id;
+                            const classes = this.getPlayerClasses(round, matchIndex, match.player1.id, isSelected);
+                            html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player1.id})">
+                                <span class="seed">${match.player1.seed}</span>
+                                <span class="player-name">${match.player1.name}</span>
+                                <span class="prefecture">${match.player1.prefecture}</span>
+                            </div>`;
+                        } else {
+                            html += `<div class="player" style="opacity: 0.3;">TBD</div>`;
+                        }
+
+                        if (match.player2) {
+                            const isSelected = this.bracket[round]?.[matchIndex] === match.player2.id;
+                            const classes = this.getPlayerClasses(round, matchIndex, match.player2.id, isSelected);
+                            html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player2.id})">
+                                <span class="seed">${match.player2.seed}</span>
+                                <span class="player-name">${match.player2.name}</span>
+                                <span class="prefecture">${match.player2.prefecture}</span>
+                            </div>`;
+                        } else {
+                            html += `<div class="player" style="opacity: 0.3;">TBD</div>`;
+                        }
+
+                        html += `</div>`;
+                    });
+
+                    html += `</div>`;
+                }
+
+                bracketDiv.innerHTML = html;
+            },
+
+            getPlayerClasses(round, matchIndex, playerId, isSelected) {
+                let classes = '';
+                if (isSelected) classes += 'selected ';
+
+                if (!this.adminMode) {
+                    const actualResults = JSON.parse(localStorage.getItem('actualResults') || '{}');
+                    if (actualResults[round]?.[matchIndex]) {
+                        if (actualResults[round][matchIndex] === playerId) {
+                            classes += 'correct';
+                        } else if (isSelected) {
+                            classes += 'incorrect';
+                        }
+                    }
+                }
+
+                return classes;
+            },
+
+            updateLeaderboard() {
+                const actualResults = JSON.parse(localStorage.getItem('actualResults') || '{}');
+                if (Object.keys(actualResults).length === 0) {
+                    document.getElementById('leaderboard').style.display = 'none';
+                    document.getElementById('leaderboardBtn').style.display = 'none';
+                    return;
+                }
+
+                // Show leaderboard button if results exist
+                document.getElementById('leaderboardBtn').style.display = 'inline-block';
+                
+                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
+                
+                const scores = Object.entries(brackets).map(([name, data]) => {
+                    let score = 0;
+                    let roundPoints = [1, 2, 4, 8, 16, 32]; // Points per round
+
+                    for (let round = 0; round < 6; round++) {
+                        const userPicks = data.predictions[round] || {};
+                        const actual = actualResults[round] || {};
+
+                        Object.keys(actual).forEach(matchup => {
+                            if (userPicks[matchup] === actual[matchup]) {
+                                score += roundPoints[round];
+                            }
+                        });
+                    }
+
+                    return { name, score };
+                }).sort((a, b) => b.score - a.score);
+
+                let html = '';
+                scores.forEach((entry, index) => {
+                    const topClass = index < 3 ? 'top' : '';
+                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                    html += `<div class="leaderboard-entry ${topClass}">
+                        <span><span class="rank">#${index + 1}</span> ${medal} ${entry.name}</span>
+                        <span><strong>${entry.score}</strong> points</span>
+                    </div>`;
+                });
+
+                document.getElementById('leaderboardContent').innerHTML = html;
+            },
+
+            toggleLeaderboard() {
+                const leaderboard = document.getElementById('leaderboard');
+                if (leaderboard.style.display === 'none') {
+                    leaderboard.style.display = 'block';
+                    leaderboard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    leaderboard.style.display = 'none';
+                }
+            },
+
+            viewAllBrackets() {
+                // Clear name and bracket
+                document.getElementById('userName').value = '';
+                this.bracket = {};
+                this.currentUser = '';
+                this.renderBracket();
+                
+                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
+                const bracketsList = document.getElementById('bracketsList');
+                
+                if (Object.keys(brackets).length === 0) {
+                    bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
+                } else {
+                    let html = '';
+                    Object.entries(brackets).forEach(([name, data]) => {
+                        const date = new Date(data.timestamp).toLocaleString();
+                        html += `<div class="bracket-item" onclick="app.loadSpecificBracket('${name}')">
+                            <div class="bracket-info">
+                                <div class="bracket-name">${name}</div>
+                                <div class="bracket-date">Saved: ${date}</div>
+                            </div>
+                            <button onclick="event.stopPropagation(); app.loadSpecificBracket('${name}')">View →</button>
+                        </div>`;
+                    });
+                    bracketsList.innerHTML = html;
+                }
+                
+                document.getElementById('bracketsModal').style.display = 'block';
+            },
+
+            loadSpecificBracket(userName) {
+                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
+                if (brackets[userName]) {
+                    this.bracket = brackets[userName].predictions;
+                    this.currentUser = userName;
+                    document.getElementById('userName').value = userName;
+                    this.renderBracket();
+                    this.closeModal();
+                }
+            },
+
+            closeModal() {
+                document.getElementById('bracketsModal').style.display = 'none';
+            }
+        };
+
+        // Initialize the app
+        app.init();
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('bracketsModal');
+            if (event.target == modal) {
+                app.closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
