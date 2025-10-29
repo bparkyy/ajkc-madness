@@ -8,6 +8,8 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
         * {
@@ -396,6 +398,44 @@
             font-size: 0.85em;
             color: #666;
         }
+
+        .locked-notice {
+            background: #fef5e7;
+            border: 2px solid #f39c12;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+            color: #d68910;
+        }
+
+        .chart-section {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+
+        .chart-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .chart-description {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
     </style>
 </head>
 <body>
@@ -431,6 +471,14 @@
 
         <div class="bracket-container">
             <div class="bracket" id="bracket"></div>
+        </div>
+
+        <div class="chart-section" id="championChart" style="display: none;">
+            <h2>📊 Predicted Champion</h2>
+            <p class="chart-description">See who everyone thinks will win the All Japan Kendo Championship!</p>
+            <div class="chart-container">
+                <canvas id="pieChart"></canvas>
+            </div>
         </div>
 
         <div class="leaderboard" id="leaderboard" style="display: none;">
@@ -471,6 +519,7 @@
             currentUser: '',
             actualResults: null,
             isLocked: false,
+            championChart: null,
             
             async init() {
                 this.generatePlayers();
@@ -478,6 +527,7 @@
                 this.renderBracket();
                 this.updateLeaderboard();
                 this.updateBracketCount();
+                this.updateChampionChart();
             },
 
              generatePlayers() {
@@ -582,6 +632,110 @@
                 }
             },
 
+                        async updateChampionChart() {
+                try {
+                    const bracketsSnapshot = await db.collection('brackets').get();
+                    
+                    if (bracketsSnapshot.empty) {
+                        document.getElementById('championChart').style.display = 'none';
+                        return;
+                    }
+
+                    // Count champion predictions (winner of round 5)
+                    const championCounts = {};
+                    
+                    bracketsSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        const finalRound = data.predictions[5]; // Round 5 is the finals
+                        if (finalRound && finalRound[0]) {
+                            const championId = finalRound[0];
+                            const champion = this.players.find(p => p.id === championId);
+                            if (champion) {
+                                const name = champion.name;
+                                championCounts[name] = (championCounts[name] || 0) + 1;
+                            }
+                        }
+                    });
+
+                    // Sort by count and get top 5
+                    const sortedChampions = Object.entries(championCounts)
+                        .sort((a, b) => b[1] - a[1]);
+
+                    if (sortedChampions.length === 0) {
+                        document.getElementById('championChart').style.display = 'none';
+                        return;
+                    }
+
+                    // Show chart section
+                    document.getElementById('championChart').style.display = 'block';
+
+                    // Prepare data for pie chart
+                    const labels = sortedChampions.map(([name, count]) => name);
+                    const data = sortedChampions.map(([name, count]) => count);
+
+                    const generateColors = (count) => {
+                        const colors = [];
+                        const borderColors = [];
+                        for (let i = 0; i < count; i++) {
+                            const hue = (i * 360 / count) % 360;
+                            colors.push(`hsla(${hue}, 70%, 60%, 0.8)`);
+                            borderColors.push(`hsla(${hue}, 70%, 50%, 1)`);
+                        }
+                        return { colors, borderColors };
+                    };
+
+                    const { colors, borderColors } = generateColors(labels.length);
+                    
+                    // Destroy existing chart if it exists
+                    if (this.championChart) {
+                        this.championChart.destroy();
+                    }
+
+                    // Create pie chart
+                    const ctx = document.getElementById('pieChart').getContext('2d');
+                    this.championChart = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: data,
+                                backgroundColor: colors,        // <-- Uses dynamic colors
+                                borderColor: borderColors,      // <-- Uses dynamic border colors
+                                borderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        padding: 15,
+                                        font: {
+                                            size: 13
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const label = context.label || '';
+                                            const value = context.parsed || 0;
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = ((value / total) * 100).toFixed(1);
+                                            return `${label}: ${value} predictions (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error('Error updating champion chart:', error);
+                }
+            },
+
             async toggleLock() {
                 try {
                     this.isLocked = !this.isLocked;
@@ -633,6 +787,7 @@
                     this.currentUser = '';
                     this.renderBracket();
                     this.updateBracketCount();
+                    this.updateChampionChart();
                 }).catch((error) => {
                     alert('Error saving bracket: ' + error.message);
                 });
@@ -724,6 +879,7 @@
                         this.renderBracket();
                         this.updateLeaderboard();
                         this.updateBracketCount();
+                        this.updateChampionChart();
                         alert('All data cleared!');
                     } catch (error) {
                         alert('Error clearing data: ' + error.message);
