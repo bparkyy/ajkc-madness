@@ -670,7 +670,7 @@
                     document.getElementById('championChart').style.display = 'block';
 
                     // Prepare data for pie chart
-                    const labels = sortedChampions.map(([name, count]) => name);
+                    const labels = sortedChampions.map(([name, count], index) => `#${index + 1} ${name}`);
                     const data = sortedChampions.map(([name, count]) => count);
 
                     const generateColors = (count) => {
