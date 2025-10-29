@@ -108,7 +108,7 @@
 
         .bracket {
             display: flex;
-            gap: 40px;
+            gap: 60px;  /* <-- Changed from 40px */
             min-width: 1200px;
             padding: 20px;
         }
@@ -118,6 +118,30 @@
             display: flex;
             flex-direction: column;
             justify-content: space-around;
+        }
+
+                .round-0 .matchup {
+            margin: 5px 0;
+        }
+
+        .round-1 .matchup {
+            margin: 20px 0;
+        }
+
+        .round-2 .matchup {
+            margin: 60px 0;
+        }
+
+        .round-3 .matchup {
+            margin: 140px 0;
+        }
+
+        .round-4 .matchup {
+            margin: 300px 0;
+        }
+
+        .round-5 .matchup {
+            margin: 620px 0;
         }
 
         .round-title {
@@ -137,14 +161,50 @@
             position: relative;
         }
 
+        .round {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            position: relative;  /* <-- Added this */
+        }
+
+        /* Horizontal line extending from matchup to the right */
         .matchup::after {
             content: '';
             position: absolute;
-            right: -40px;
+            left: 100%;
             top: 50%;
-            width: 40px;
+            width: 20px;
             height: 2px;
             background: #cbd5e0;
+        }
+
+        /* Hide line for final round */
+        .round:last-child .matchup::after {
+            display: none;
+        }
+
+        /* Vertical connector between pairs of matches */
+        .matchup.has-connector::before {
+            content: '';
+            position: absolute;
+            left: calc(100% + 20px);
+            top: 50%;
+            width: 2px;
+            background: #cbd5e0;
+        }
+
+        /* Top match of pair - line goes down */
+        .matchup.connector-down::before {
+            height: calc(100% + 10px + 50%);
+        }
+
+        /* Bottom match of pair - line goes up */
+        .matchup.connector-up::before {
+            height: calc(100% + 10px + 50%);
+            bottom: 50%;
+            top: auto;
         }
 
         .round:last-child .matchup::after {
@@ -734,11 +794,23 @@
 
                 for (let round = 0; round < 6; round++) {
                     const matches = this.getRoundMatches(round);
-                    html += `<div class="round">`;
+                    html += `<div class="round round-${round}">`;
                     html += `<div class="round-title">${rounds[round]}</div>`;
 
                     matches.forEach((match, matchIndex) => {
-                        html += `<div class="matchup">`;
+                        // Determine if this match needs connectors
+                        let connectorClass = '';
+                        if (round < 5) { // Not the final round
+                            if (matchIndex % 2 === 0) {
+                                // Top match of pair
+                                connectorClass = 'has-connector connector-down';
+                            } else {
+                                // Bottom match of pair
+                                connectorClass = 'has-connector connector-up';
+                            }
+                        }
+                        
+                        html += `<div class="matchup ${connectorClass}">`;
                         
                         if (match.player1) {
                             const isSelected = this.bracket[round]?.[matchIndex] === match.player1.id;
