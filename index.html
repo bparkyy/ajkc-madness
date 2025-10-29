@@ -98,11 +98,11 @@
             background: var(--men-accent);
         }
 
-        body.women button {
+        body.women button:not(.gender-toggle button) {
             background: var(--women-primary);
         }
 
-        body.women button:hover {
+        body.women button:not(.gender-toggle button):hover {
             background: var(--women-accent);
         }
 
@@ -142,11 +142,17 @@
             color: white;
         }
 
-        body.women .gender-toggle button.active {
-            background: var(--women-primary);
+        body.women .gender-toggle button:not(.active) {
+            background: transparent;
+            color: #666;
         }
 
-        .gender-toggle button:hover {
+        body.women .gender-toggle button.active {
+            background: var(--women-primary);
+            color: white;
+        }
+
+        .gender-toggle button:hover:not(.active) {
             background: #e2e8f0;
         }
 
@@ -608,7 +614,7 @@
                 await this.checkLockStatus();
                 this.renderBracket();
                 this.updateLeaderboard();
-                this.updateBracketCount();
+                await this.updateBracketCount();
                 this.updateChampionChart();
             },
 
