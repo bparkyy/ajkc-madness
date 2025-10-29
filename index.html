@@ -346,6 +346,10 @@
             <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, the leaderboard will show who had the closest bracket! Bracket will lock once tournament begins.
         </div>
 
+        <div id="lockedNotice" class="locked-notice" style="display: none;">
+            🔒 Tournament has started! Bracket submissions are now locked.
+        </div>
+
         <div class="controls">
             <div class="user-input">
                 <input type="text" id="userName" placeholder="Enter your name" />
@@ -354,11 +358,15 @@
             <button onclick="app.viewAllBrackets()">👥 View All Brackets</button>
             <button onclick="app.toggleAdminMode()">⚙️ Admin Mode</button>
             <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn">🏆 View Leaderboard</button>
+            <div id="bracketCount" style="padding: 10px 20px; background: #edf2f7; border-radius: 6px; font-weight: 600; color: #667eea;">
+                📊 Loading...
+            </div>
         </div>
 
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
             <span id="modeText"></span>
             <button class="danger" onclick="app.clearAll()" style="margin-left: 20px;">🗑️ Clear All Data</button>
+            <button onclick="app.toggleLock()" style="margin-left: 10px;" id="lockBtn">🔒 Lock Submissions</button>
         </div>
 
         <div class="bracket-container">
@@ -402,14 +410,17 @@
             adminMode: false,
             currentUser: '',
             actualResults: null,
+            isLocked: false,
             
-            init() {
+            async init() {
                 this.generatePlayers();
+                await this.checkLockStatus();
                 this.renderBracket();
-                this.updateLeaderboard(); // Update leaderboard on load
+                this.updateLeaderboard();
+                this.updateBracketCount();
             },
 
-            generatePlayers() {
+             generatePlayers() {
                 const players = [
                     // Left side of bracket (32 players)
                     { name: 'Y.KUROKAWA', prefecture: 'Kanagawa', seed: 5 },
@@ -434,7 +445,7 @@
                     { name: 'H.HOSHINO', prefecture: 'Gunma', seed: 5 },
                     { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', seed: 5 },
                     { name: 'N.TASHIRO', prefecture: 'Fukuoka', seed: 4 },
-                    { name: 'Y.ITO', prefecture: 'Saitama', seed: 4 },
+                    { name: 'Y.JITO', prefecture: 'Saitama', seed: 4 },
                     { name: 'H.ISHIDA', prefecture: 'Yamagata', seed: 5 },
                     { name: 'R.SEIKE', prefecture: 'Osaka', seed: 5 },
                     { name: 'K.MUKUNASHI', prefecture: 'Tokyo', seed: 5 },
@@ -466,9 +477,9 @@
                     { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', seed: 6 },
                     { name: 'Y.NOMURA', prefecture: 'Kanagawa', seed: 'R7' },
                     { name: 'T.YAMURA', prefecture: 'Yamaguchi', seed: 5 },
-                    { name: 'K.HOSHIKO', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'K.HORIURO', prefecture: 'Tokyo', seed: 5 },
                     { name: 'T.TSURUHAMA', prefecture: 'Osaka', seed: 2 },
-                    { name: 'Y.ITO', prefecture: 'Gifu', seed: 5 },
+                    { name: 'Y.JITO', prefecture: 'Gifu', seed: 5 },
                     { name: 'S.IZAWA', prefecture: 'Hokkaido', seed: 6 },
                     { name: 'Y.SASAKI', prefecture: 'Chiba', seed: 5 },
                     { name: 'R.NISHIDA', prefecture: 'Tokushima', seed: 6 },
@@ -486,7 +497,63 @@
                 }));
             },
 
+            async checkLockStatus() {
+                try {
+                    const lockDoc = await db.collection('settings').doc('tournament').get();
+                    if (lockDoc.exists) {
+                        this.isLocked = lockDoc.data().locked || false;
+                        if (this.isLocked) {
+                            document.getElementById('lockedNotice').style.display = 'block';
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking lock status:', error);
+                }
+            },
+
+            async updateBracketCount() {
+                try {
+                    const bracketsSnapshot = await db.collection('brackets').get();
+                    const count = bracketsSnapshot.size;
+                    document.getElementById('bracketCount').textContent = `📊 ${count} Bracket${count !== 1 ? 's' : ''} Submitted`;
+                } catch (error) {
+                    console.error('Error counting brackets:', error);
+                    document.getElementById('bracketCount').textContent = '📊 Error loading count';
+                }
+            },
+
+            async toggleLock() {
+                try {
+                    this.isLocked = !this.isLocked;
+                    
+                    await db.collection('settings').doc('tournament').set({
+                        locked: this.isLocked,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    const lockBtn = document.getElementById('lockBtn');
+                    const lockedNotice = document.getElementById('lockedNotice');
+                    
+                    if (this.isLocked) {
+                        lockBtn.textContent = '🔓 Unlock Submissions';
+                        lockedNotice.style.display = 'block';
+                        alert('Tournament locked! Users can no longer submit or modify brackets.');
+                    } else {
+                        lockBtn.textContent = '🔒 Lock Submissions';
+                        lockedNotice.style.display = 'none';
+                        alert('Tournament unlocked! Users can now submit brackets again.');
+                    }
+                } catch (error) {
+                    alert('Error toggling lock: ' + error.message);
+                }
+            },
+
             saveBracket() {
+                if (this.isLocked && !this.adminMode) {
+                    alert('Tournament is locked! Bracket submissions are no longer allowed.');
+                    return;
+                }
+                
                 const userName = document.getElementById('userName').value.trim();
                 if (!userName) {
                     alert('Please enter your name!');
@@ -505,6 +572,7 @@
                     this.bracket = {};
                     this.currentUser = '';
                     this.renderBracket();
+                    this.updateBracketCount();
                 }).catch((error) => {
                     alert('Error saving bracket: ' + error.message);
                 });
@@ -535,6 +603,10 @@
                     // Clear name and bracket when entering admin mode
                     document.getElementById('userName').value = '';
                     this.currentUser = '';
+                    
+                    // Update lock button text based on current status
+                    const lockBtn = document.getElementById('lockBtn');
+                    lockBtn.textContent = this.isLocked ? '🔓 Unlock Submissions' : '🔒 Lock Submissions';
                     
                     // Load actual results from Firebase if they exist
                     try {
@@ -591,6 +663,7 @@
                         document.getElementById('userName').value = '';
                         this.renderBracket();
                         this.updateLeaderboard();
+                        this.updateBracketCount();
                         alert('All data cleared!');
                     } catch (error) {
                         alert('Error clearing data: ' + error.message);
