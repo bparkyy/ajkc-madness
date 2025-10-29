@@ -517,7 +517,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 id="bracketTitle">🥋 All Japan Kendo Championship - Men's Bracket</h1>
+        <h1 id="bracketTitle">All Japan Kendo Championship - Men's Bracket</h1>
         
         <div style="display: flex; justify-content: center; margin: 20px 0;">
             <div class="gender-toggle">
@@ -777,7 +777,7 @@
                 // Update UI
                 document.body.className = gender === 'women' ? 'women' : '';
                 document.getElementById('bracketTitle').textContent = 
-                    `🥋 All Japan Kendo Championship - ${gender === 'men' ? "Men's" : "Women's"} Bracket`;
+                    `All Japan Kendo Championship - ${gender === 'men' ? "Men's" : "Women's"} Bracket`;
                 document.getElementById('menBtn').classList.toggle('active', gender === 'men');
                 document.getElementById('womenBtn').classList.toggle('active', gender === 'women');
                 
