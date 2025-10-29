@@ -9,22 +9,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
-    <!-- Chart.js for visualizations -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style>
-        :root {
-            /* Men's color scheme (blue/purple) */
-            --men-primary: #667eea;
-            --men-secondary: #764ba2;
-            --men-accent: #5568d3;
-            
-            /* Women's color scheme (pink/rose) */
-            --women-primary: #ec4899;
-            --women-secondary: #be185d;
-            --women-accent: #db2777;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -33,14 +20,9 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--men-primary) 0%, var(--men-secondary) 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 20px;
             min-height: 100vh;
-            transition: background 0.5s ease;
-        }
-
-        body.women {
-            background: linear-gradient(135deg, var(--women-primary) 0%, var(--women-secondary) 100%);
         }
 
         .container {
@@ -57,6 +39,13 @@
             color: #333;
             margin-bottom: 10px;
             font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
         }
 
         .controls {
@@ -84,7 +73,7 @@
 
         button {
             padding: 10px 20px;
-            background: var(--men-primary);
+            background: #667eea;
             color: white;
             border: none;
             border-radius: 6px;
@@ -95,15 +84,7 @@
         }
 
         button:hover {
-            background: var(--men-accent);
-        }
-
-        body.women button {
-            background: var(--women-primary);
-        }
-
-        body.women button:hover {
-            background: var(--women-accent);
+            background: #5568d3;
         }
 
         button.secondary {
@@ -122,42 +103,6 @@
             background: #e53e3e;
         }
 
-        .gender-toggle {
-            display: flex;
-            background: #f7fafc;
-            border-radius: 8px;
-            padding: 4px;
-            gap: 4px;
-        }
-
-        .gender-toggle button {
-            background: transparent;
-            color: #666;
-            padding: 8px 16px;
-            font-size: 13px;
-        }
-
-        .gender-toggle button.active {
-            background: var(--men-primary);
-            color: white;
-        }
-
-        body.women .gender-toggle button.active {
-            background: var(--women-primary);
-        }
-
-        .gender-toggle button:hover {
-            background: #e2e8f0;
-        }
-
-        .gender-toggle button.active:hover {
-            background: var(--men-accent);
-        }
-
-        body.women .gender-toggle button.active:hover {
-            background: var(--women-accent);
-        }
-
         .bracket-container {
             overflow-x: auto;
             margin-top: 30px;
@@ -165,7 +110,7 @@
 
         .bracket {
             display: flex;
-            gap: 60px;
+            gap: 60px;  /* <-- Changed from 40px */
             min-width: 1200px;
             padding: 20px;
         }
@@ -175,10 +120,9 @@
             display: flex;
             flex-direction: column;
             justify-content: space-around;
-            position: relative;
         }
 
-        .round-0 .matchup {
+                .round-0 .matchup {
             margin: 5px 0;
         }
 
@@ -205,13 +149,9 @@
         .round-title {
             text-align: center;
             font-weight: bold;
-            color: var(--men-primary);
+            color: #667eea;
             margin-bottom: 20px;
             font-size: 1.1em;
-        }
-
-        body.women .round-title {
-            color: var(--women-primary);
         }
 
         .matchup {
@@ -221,6 +161,14 @@
             margin: 10px 0;
             padding: 8px;
             position: relative;
+        }
+
+        .round {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            position: relative;  /* <-- Added this */
         }
 
         /* Horizontal line extending from matchup to the right */
@@ -261,6 +209,15 @@
             top: auto;
         }
 
+        .round:last-child .matchup::after {
+            display: none;
+        }
+
+        .bracket-line {
+            position: absolute;
+            background: #cbd5e0;
+        }
+
         .player {
             padding: 12px;
             cursor: pointer;
@@ -277,13 +234,9 @@
         }
 
         .player.selected {
-            background: var(--men-primary);
+            background: #667eea;
             color: white;
             font-weight: 600;
-        }
-
-        body.women .player.selected {
-            background: var(--women-primary);
         }
 
         .player.correct {
@@ -307,7 +260,7 @@
             margin-left: 8px;
         }
 
-        .rank {
+        .seed {
             font-size: 0.85em;
             opacity: 0.7;
             margin-right: 8px;
@@ -334,11 +287,7 @@
             background: white;
             margin: 8px 0;
             border-radius: 6px;
-            border-left: 4px solid var(--men-primary);
-        }
-
-        body.women .leaderboard-entry {
-            border-left-color: var(--women-primary);
+            border-left: 4px solid #667eea;
         }
 
         .leaderboard-entry.top {
@@ -346,14 +295,10 @@
             font-weight: 600;
         }
 
-        .leaderboard .rank {
+        .rank {
             font-weight: bold;
-            color: var(--men-primary);
+            color: #667eea;
             min-width: 40px;
-        }
-
-        body.women .leaderboard .rank {
-            color: var(--women-primary);
         }
 
         .instructions {
@@ -372,23 +317,7 @@
             border-radius: 6px;
             margin-bottom: 20px;
             font-weight: 600;
-            color: var(--men-primary);
-        }
-
-        body.women .mode-indicator {
-            color: var(--women-primary);
-        }
-
-        #bracketCount {
-            padding: 10px 20px;
-            background: #edf2f7;
-            border-radius: 6px;
-            font-weight: 600;
-            color: var(--men-primary);
-        }
-
-        body.women #bracketCount {
-            color: var(--women-primary);
+            color: #667eea;
         }
 
         .modal {
@@ -511,14 +440,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 id="bracketTitle">🥋 All Japan Kendo Championship - Men's Bracket</h1>
-        
-        <div style="display: flex; justify-content: center; margin: 20px 0;">
-            <div class="gender-toggle">
-                <button id="menBtn" class="active" onclick="app.switchGender('men')">👨 Men's Bracket</button>
-                <button id="womenBtn" onclick="app.switchGender('women')">👩 Women's Bracket</button>
-            </div>
-        </div>
+        <h1>All Japan Kendo Championship Bracket</h1>
 
         <div class="instructions">
             <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, the leaderboard will show who had the closest bracket! Bracket will lock once tournament begins.
@@ -536,7 +458,7 @@
             <button onclick="app.viewAllBrackets()">👥 View All Brackets</button>
             <button onclick="app.toggleAdminMode()">⚙️ Admin Mode</button>
             <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn">🏆 View Leaderboard</button>
-            <div id="bracketCount" style="padding: 10px 20px; background: #edf2f7; border-radius: 6px; font-weight: 600;">
+            <div id="bracketCount" style="padding: 10px 20px; background: #edf2f7; border-radius: 6px; font-weight: 600; color: #667eea;">
                 📊 Loading...
             </div>
         </div>
@@ -592,19 +514,15 @@
 
         const app = {
             players: [],
-            menPlayers: [],
-            womenPlayers: [],
             bracket: {},
             adminMode: false,
             currentUser: '',
             actualResults: null,
             isLocked: false,
             championChart: null,
-            currentGender: 'men',
             
             async init() {
                 this.generatePlayers();
-                this.players = this.menPlayers; // Start with men's bracket
                 await this.checkLockStatus();
                 this.renderBracket();
                 this.updateLeaderboard();
@@ -612,190 +530,91 @@
                 this.updateChampionChart();
             },
 
-            generatePlayers() {
-                const menPlayersData = [
+             generatePlayers() {
+                const players = [
                     // Left side of bracket (32 players)
-                    { name: 'Y.KUROKAWA', prefecture: 'Kanagawa', rank: 5 },
-                    { name: 'T.CHIKAMOTO', prefecture: 'Aichi', rank: 5 },
-                    { name: 'Y.YAMADA', prefecture: 'Nara', rank: 'R6' },
-                    { name: 'Y.OKUMURA', prefecture: 'Hokkaido', rank: 5 },
-                    { name: 'H.SOMEYA', prefecture: 'Chiba', rank: 5 },
-                    { name: 'M.HATSUKANO', prefecture: 'Tottori', rank: 4 },
-                    { name: 'K.SHIMOKUBO', prefecture: 'Miyazaki', rank: 'R6' },
-                    { name: 'T.MORIMOTO', prefecture: 'Kagawa', rank: 'R6' },
-                    { name: 'K.SENDA', prefecture: 'Miyagi', rank: 5 },
-                    { name: 'R.KUNITOMO', prefecture: 'Fukuoka', rank: 'R6' },
-                    { name: 'Y.NAKANE', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'S.NISHIZAWA', prefecture: 'Nagano', rank: 5 },
-                    { name: 'Y.TAKENOUCHI', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'S.MAEDA', prefecture: 'Hyogo', rank: 6 },
-                    { name: 'Y.MATSUOKA', prefecture: 'Mie', rank: 5 },
-                    { name: 'R.KAMOI', prefecture: 'Okayama', rank: 5 },
-                    { name: 'T.UEZU', prefecture: 'Okinawa', rank: 'R7' },
-                    { name: 'K.TAKEMOTO', prefecture: 'Shiga', rank: 4 },
-                    { name: 'R.NATSUMEDA', prefecture: 'Hiroshima', rank: 4 },
-                    { name: 'H.HOSHINO', prefecture: 'Gunma', rank: 5 },
-                    { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', rank: 5 },
-                    { name: 'N.TASHIRO', prefecture: 'Fukuoka', rank: 4 },
-                    { name: 'Y.ITO', prefecture: 'Saitama', rank: 4 },
-                    { name: 'H.ISHIDA', prefecture: 'Yamagata', rank: 5 },
-                    { name: 'R.SEIKE', prefecture: 'Osaka', rank: 5 },
-                    { name: 'K.MUKUNASHI', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'T.TAKADA', prefecture: 'Aomori', rank: 'R6' },
-                    { name: 'K.KUSUNOKI', prefecture: 'Shimane', rank: 4 },
-                    { name: 'R.SUZUKI', prefecture: 'Chiba', rank: 4 },
-                    { name: 'E.KANASAKI', prefecture: 'Toyama', rank: 4 },
-                    { name: 'M.KUROKI', prefecture: 'Oita', rank: 5 },
-                    { name: 'T.MURAKAMI', prefecture: 'Ehime', rank: 'R6' },
+                    { name: 'Y.KUROKAWA', prefecture: 'Kanagawa', seed: 5 },
+                    { name: 'T.CHIKAMOTO', prefecture: 'Aichi', seed: 5 },
+                    { name: 'Y.YAMADA', prefecture: 'Nara', seed: 'R6' },
+                    { name: 'Y.OKUMURA', prefecture: 'Hokkaido', seed: 5 },
+                    { name: 'H.SOMEYA', prefecture: 'Chiba', seed: 5 },
+                    { name: 'M.HATSUKANO', prefecture: 'Tottori', seed: 4 },
+                    { name: 'K.SHIMOKUBO', prefecture: 'Miyazaki', seed: 'R6' },
+                    { name: 'T.MORIMOTO', prefecture: 'Kagawa', seed: 'R6' },
+                    { name: 'K.SENDA', prefecture: 'Miyagi', seed: 5 },
+                    { name: 'R.KUNITOMO', prefecture: 'Fukuoka', seed: 'R6' },
+                    { name: 'Y.NAKANE', prefecture: 'Ibaraki', seed: 5 },
+                    { name: 'S.NISHIZAWA', prefecture: 'Nagano', seed: 5 },
+                    { name: 'Y.TAKENOUCHI', prefecture: 'Tokyo', seed: 6 },
+                    { name: 'S.MAEDA', prefecture: 'Hyogo', seed: 6 },
+                    { name: 'Y.MATSUOKA', prefecture: 'Mie', seed: 5 },
+                    { name: 'R.KAMOI', prefecture: 'Okayama', seed: 5 },
+                    { name: 'T.UEZU', prefecture: 'Okinawa', seed: 'R7' },
+                    { name: 'K.TAKEMOTO', prefecture: 'Shiga', seed: 4 },
+                    { name: 'R.NATSUMEDA', prefecture: 'Hiroshima', seed: 4 },
+                    { name: 'H.HOSHINO', prefecture: 'Gunma', seed: 5 },
+                    { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', seed: 5 },
+                    { name: 'N.TASHIRO', prefecture: 'Fukuoka', seed: 4 },
+                    { name: 'Y.ITO', prefecture: 'Saitama', seed: 4 },
+                    { name: 'H.ISHIDA', prefecture: 'Yamagata', seed: 5 },
+                    { name: 'R.SEIKE', prefecture: 'Osaka', seed: 5 },
+                    { name: 'K.MUKUNASHI', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'T.TAKADA', prefecture: 'Aomori', seed: 'R6' },
+                    { name: 'K.KUSUNOKI', prefecture: 'Shimane', seed: 4 },
+                    { name: 'R.SUZUKI', prefecture: 'Chiba', seed: 4 },
+                    { name: 'E.KANASAKI', prefecture: 'Toyama', seed: 4 },
+                    { name: 'M.KUROKI', prefecture: 'Oita', seed: 5 },
+                    { name: 'T.MURAKAMI', prefecture: 'Ehime', seed: 'R6' },
                     
                     // Right side of bracket (32 players)
-                    { name: 'K.NAKAZAWA', prefecture: 'Kochi', rank: 'R6' },
-                    { name: 'S.MATSUI', prefecture: 'Tochigi', rank: 5 },
-                    { name: 'K.MATSUZAKI', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'T.NAGANO', prefecture: 'Hyogo', rank: 'R6' },
-                    { name: 'S.HAMASAKI', prefecture: 'Kagoshima', rank: 6 },
-                    { name: 'K.KUNIYASU', prefecture: 'Akita', rank: 5 },
-                    { name: 'K.OKA', prefecture: 'Saga', rank: 5 },
-                    { name: 'S.KANO', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'K.KIMURA', prefecture: 'Osaka', rank: 5 },
-                    { name: 'H.SAKAMOTO', prefecture: 'Shimane', rank: 'R6' },
-                    { name: 'K.HASHIMOTO', prefecture: 'Saitama', rank: 'R7' },
-                    { name: 'K.HAYASHIDA', prefecture: 'Nagasaki', rank: 6 },
-                    { name: 'S.OTANI', prefecture: 'Fukushima', rank: 'R6' },
-                    { name: 'H.ABIRU', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'Y.KUDAMATSU', prefecture: 'Aichi', rank: 5 },
-                    { name: 'M.TABATA', prefecture: 'Niigata', rank: 3 },
-                    { name: 'H.NISHIMURA', prefecture: 'Kumamoto', rank: 'R7' },
-                    { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', rank: 6 },
-                    { name: 'Y.NOMURA', prefecture: 'Kanagawa', rank: 'R7' },
-                    { name: 'T.YAMURA', prefecture: 'Yamaguchi', rank: 5 },
-                    { name: 'K.HOSHIKO', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'T.TSURUHAMA', prefecture: 'Osaka', rank: 5 },
-                    { name: 'Y.ITO', prefecture: 'Gifu', rank: 5 },
-                    { name: 'S.IZAWA', prefecture: 'Hokkaido', rank: 6 },
-                    { name: 'Y.SASAKI', prefecture: 'Chiba', rank: 5 },
-                    { name: 'R.NISHIDA', prefecture: 'Tokushima', rank: 6 },
-                    { name: 'S.OGURA', prefecture: 'Wakayama', rank: 5 },
-                    { name: 'M.FURUDATE', prefecture: 'Iwate', rank: 'R7' },
-                    { name: 'S.AREMATSU', prefecture: 'Saitama', rank: 6 },
-                    { name: 'S.TOMITA', prefecture: 'Fukui', rank: 6 },
-                    { name: 'R.GOYA', prefecture: 'Kyoto', rank: 'R6' },
-                    { name: 'R.IKEDA', prefecture: 'Fukuoka', rank: 4 }
+                    { name: 'K.NAKAZAWA', prefecture: 'Kochi', seed: 'R6' },
+                    { name: 'S.MATSUI', prefecture: 'Tochigi', seed: 5 },
+                    { name: 'K.MATSUZAKI', prefecture: 'Ibaraki', seed: 5 },
+                    { name: 'T.NAGANO', prefecture: 'Hyogo', seed: 'R6' },
+                    { name: 'S.HAMASAKI', prefecture: 'Kagoshima', seed: 6 },
+                    { name: 'K.KUNIYASU', prefecture: 'Akita', seed: 5 },
+                    { name: 'K.OKA', prefecture: 'Saga', seed: 5 },
+                    { name: 'S.KANO', prefecture: 'Tokyo', seed: 6 },
+                    { name: 'K.KIMURA', prefecture: 'Osaka', seed: 5 },
+                    { name: 'H.SAKAMOTO', prefecture: 'Shimane', seed: 'R6' },
+                    { name: 'K.HASHIMOTO', prefecture: 'Saitama', seed: 'R7' },
+                    { name: 'K.HAYASHIDA', prefecture: 'Nagasaki', seed: 6 },
+                    { name: 'S.OTANI', prefecture: 'Fukushima', seed: 'R6' },
+                    { name: 'H.ABIRU', prefecture: 'Tokyo', seed: 4 },
+                    { name: 'Y.KUDAMATSU', prefecture: 'Aichi', seed: 5 },
+                    { name: 'M.TABATA', prefecture: 'Niigata', seed: 3 },
+                    { name: 'H.NISHIMURA', prefecture: 'Kumamoto', seed: 'R7' },
+                    { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', seed: 6 },
+                    { name: 'Y.NOMURA', prefecture: 'Kanagawa', seed: 'R7' },
+                    { name: 'T.YAMURA', prefecture: 'Yamaguchi', seed: 5 },
+                    { name: 'K.HOSHIKO', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'T.TSURUHAMA', prefecture: 'Osaka', seed: 5 },
+                    { name: 'Y.ITO', prefecture: 'Gifu', seed: 5 },
+                    { name: 'S.IZAWA', prefecture: 'Hokkaido', seed: 6 },
+                    { name: 'Y.SASAKI', prefecture: 'Chiba', seed: 5 },
+                    { name: 'R.NISHIDA', prefecture: 'Tokushima', seed: 6 },
+                    { name: 'S.OGURA', prefecture: 'Wakayama', seed: 5 },
+                    { name: 'M.FURUDATE', prefecture: 'Iwate', seed: 'R7' },
+                    { name: 'S.AREMATSU', prefecture: 'Saitama', seed: 6 },
+                    { name: 'S.TOMITA', prefecture: 'Fukui', seed: 6 },
+                    { name: 'R.GOYA', prefecture: 'Kyoto', seed: 'R6' },
+                    { name: 'R.IKEDA', prefecture: 'Fukuoka', seed: 4 }
                 ];
 
-                const womenPlayersData = [
-                    { name: 'R.KUSUNOSE', prefecture: 'Kagawa', rank: 4 },
-                    { name: 'A.SEKIKAWA', prefecture: 'Hokkaido', rank: 4 },
-                    { name: 'A.YAMADA', prefecture: 'Shizuoka', rank: 4 },
-                    { name: 'M.KONDO', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'K.SHINOHARA', prefecture: 'Nara', rank: 'R6' },
-                    { name: 'S.NAKAMURA', prefecture: 'Ibaraki', rank: 3 },
-                    { name: 'A.SHOJIMA', prefecture: 'Saga', rank: 4 },
-                    { name: 'M.HATSUKANO', prefecture: 'Tottori', rank: 5 },
-                    { name: 'H.MIZUKAWA', prefecture: 'Osaka', rank: 4 },
-                    { name: 'A.SHITO', prefecture: 'Saitama', rank: 6 },
-                    { name: 'M.YOKOYAMA', prefecture: 'Ishikawa', rank: 3 },
-                    { name: 'K.HIGASHINO', prefecture: 'Aichi', rank: 4 },
-                    { name: 'M.SUENAGA', prefecture: 'Wakayama', rank: 'R7' },
-                    { name: 'A.ISHIJIMA', prefecture: 'Tochigi', rank: 3 },
-                    { name: 'Y.SATO', prefecture: 'Akita', rank: 4 },
-                    { name: 'S.KAKIMOTO', prefecture: 'Fukuoka', rank: 4 },
-                    { name: 'M.SATO', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'K.KIKUCHI', prefecture: 'Kagoshima', rank: 3 },
-                    { name: 'A.WATANABE', prefecture: 'Ehime', rank: 5 },
-                    { name: 'M.OKOMA', prefecture: 'Gunma', rank: 2 },
-                    { name: 'K.FUJISAKI', prefecture: 'Osaka', rank: 5 },
-                    { name: 'K.MORIZONO', prefecture: 'Gifu', rank: 3 },
-                    { name: 'M.TAKAHASHI', prefecture: 'Kanagawa', rank: 'R6' },
-                    { name: 'M.SAITO', prefecture: 'Yamagata', rank: 5 },
-                    { name: 'H.HASHIMOTO', prefecture: 'Yamaguchi', rank: 3 },
-                    { name: 'N.TAMAI', prefecture: 'Chiba', rank: 4 },
-                    { name: 'A.KIMURA', prefecture: 'Hyogo', rank: 'R6' },
-                    { name: 'M.NAKATSUKA', prefecture: 'Kumamoto', rank: 3 },
-                    { name: 'M.OGAWA', prefecture: 'Aichi', rank: 5 },
-                    { name: 'K.KOMATSU', prefecture: 'Miyagi', rank: 5 },
-                    { name: 'H.NAKAMURA', prefecture: 'Saitama', rank: 4 },
-                    { name: 'H.UEKI', prefecture: 'Niigata', rank: 4 },
-                    { name: 'A.ONIZUKA', prefecture: 'Chiba', rank: 5 },
-                    { name: 'N.KIFA', prefecture: 'Okinawa', rank: 4 },
-                    { name: 'Y.MIYABE', prefecture: 'Shiga', rank: 3 },
-                    { name: 'S.OTA', prefecture: 'Aomori', rank: 4 },
-                    { name: 'M.SENO', prefecture: 'Fukuoka', rank: 5 },
-                    { name: 'A.NISHIO', prefecture: 'Kochi', rank: 4 },
-                    { name: 'K.MORIYAMA', prefecture: 'Shimane', rank: 6 },
-                    { name: 'N.UESUGI', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'A.OZAKI', prefecture: 'Kyoto', rank: 'R6' },
-                    { name: 'H.FUKUHARA', prefecture: 'Toyama', rank: 4 },
-                    { name: 'H.ISHIDA', prefecture: 'Okayama', rank: 4 },
-                    { name: 'H.RYU', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'M.OZONO', prefecture: 'Nagasaki', rank: 5 },
-                    { name: 'M.TAKENAKA', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'M.MITSUISHI', prefecture: 'Yamanashi', rank: 6 },
-                    { name: 'K.KAWAI', prefecture: 'Shizuoka', rank: 4 },
-                    { name: 'M.SAKAI', prefecture: 'Chiba', rank: 5 },
-                    { name: 'S.OGAWA', prefecture: 'Hyogo', rank: 4 },
-                    { name: 'N.ONISHI', prefecture: 'Fukui', rank: 6 },
-                    { name: 'M.ANDO', prefecture: 'Aichi', rank: 4 },
-                    { name: 'W.IGARASHI', prefecture: 'Fukushima', rank: 3 },
-                    { name: 'R.OGAWA', prefecture: 'Saitama', rank: 5 },
-                    { name: 'M.YOKOZAWA', prefecture: 'Hiroshima', rank: 5 },
-                    { name: 'R.YAMASAKI', prefecture: 'Miyazaki', rank: 5 },
-                    { name: 'Y.OSHIMA', prefecture: 'Osaka', rank: 4 },
-                    { name: 'A.NAKA', prefecture: 'Mie', rank: 3 },
-                    { name: 'C.MATSUMOTO', prefecture: 'Kanagawa', rank: 5 },
-                    { name: 'M.KITAZAWA', prefecture: 'Nagano', rank: 4 },
-                    { name: 'C.OMOTE', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'K.FUJISAWA', prefecture: 'Iwate', rank: 'R6' },
-                    { name: 'C.IWAHARA', prefecture: 'Tokushima', rank: 4 },
-                    { name: 'E.KONAKAHARA', prefecture: 'Oita', rank: 3 }
-                ];
-
-                this.menPlayers = menPlayersData.map((p, i) => ({
+                this.players = players.map((p, i) => ({
                     id: i + 1,
                     ...p
                 }));
-
-                this.womenPlayers = womenPlayersData.map((p, i) => ({
-                    id: i + 1,
-                    ...p
-                }));
-            },
-
-            switchGender(gender) {
-                this.currentGender = gender;
-                this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
-                this.bracket = {};
-                this.currentUser = '';
-                document.getElementById('userName').value = '';
-                
-                // Update UI
-                document.body.className = gender === 'women' ? 'women' : '';
-                document.getElementById('bracketTitle').textContent = 
-                    `🥋 All Japan Kendo Championship - ${gender === 'men' ? "Men's" : "Women's"} Bracket`;
-                document.getElementById('menBtn').classList.toggle('active', gender === 'men');
-                document.getElementById('womenBtn').classList.toggle('active', gender === 'women');
-                
-                // Reload data for this gender
-                this.checkLockStatus();
-                this.renderBracket();
-                this.updateLeaderboard();
-                this.updateBracketCount();
-                this.updateChampionChart();
             },
 
             async checkLockStatus() {
                 try {
-                    const lockDoc = await db.collection('settings-' + this.currentGender).doc('tournament').get();
+                    const lockDoc = await db.collection('settings').doc('tournament').get();
                     if (lockDoc.exists) {
                         this.isLocked = lockDoc.data().locked || false;
                         if (this.isLocked) {
                             document.getElementById('lockedNotice').style.display = 'block';
-                        } else {
-                            document.getElementById('lockedNotice').style.display = 'none';
                         }
-                    } else {
-                        this.isLocked = false;
-                        document.getElementById('lockedNotice').style.display = 'none';
                     }
                 } catch (error) {
                     console.error('Error checking lock status:', error);
@@ -804,7 +623,7 @@
 
             async updateBracketCount() {
                 try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                    const bracketsSnapshot = await db.collection('brackets').get();
                     const count = bracketsSnapshot.size;
                     document.getElementById('bracketCount').textContent = `📊 ${count} Bracket${count !== 1 ? 's' : ''} Submitted`;
                 } catch (error) {
@@ -813,9 +632,9 @@
                 }
             },
 
-            async updateChampionChart() {
+                        async updateChampionChart() {
                 try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                    const bracketsSnapshot = await db.collection('brackets').get();
                     
                     if (bracketsSnapshot.empty) {
                         document.getElementById('championChart').style.display = 'none';
@@ -838,7 +657,7 @@
                         }
                     });
 
-                    // Sort by count
+                    // Sort by count and get top 5
                     const sortedChampions = Object.entries(championCounts)
                         .sort((a, b) => b[1] - a[1]);
 
@@ -880,8 +699,8 @@
                             labels: labels,
                             datasets: [{
                                 data: data,
-                                backgroundColor: colors,
-                                borderColor: borderColors,
+                                backgroundColor: colors,        // <-- Uses dynamic colors
+                                borderColor: borderColors,      // <-- Uses dynamic border colors
                                 borderWidth: 2
                             }]
                         },
@@ -921,7 +740,7 @@
                 try {
                     this.isLocked = !this.isLocked;
                     
-                    await db.collection('settings-' + this.currentGender).doc('tournament').set({
+                    await db.collection('settings').doc('tournament').set({
                         locked: this.isLocked,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     });
@@ -955,8 +774,8 @@
                     return;
                 }
 
-                // Save to Firebase Firestore with gender suffix
-                db.collection('brackets-' + this.currentGender).doc(userName).set({
+                // Save to Firebase Firestore
+                db.collection('brackets').doc(userName).set({
                     predictions: this.bracket,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 }).then(() => {
@@ -972,6 +791,18 @@
                 }).catch((error) => {
                     alert('Error saving bracket: ' + error.message);
                 });
+            },
+
+            async loadFromFirebase() {
+                try {
+                    // Check if actual results exist
+                    const resultsDoc = await db.collection('actualResults').doc('current').get();
+                    if (resultsDoc.exists) {
+                        document.getElementById('leaderboardBtn').style.display = 'inline-block';
+                    }
+                } catch (error) {
+                    console.error('Error loading from Firebase:', error);
+                }
             },
 
             async toggleAdminMode() {
@@ -994,7 +825,7 @@
                     
                     // Load actual results from Firebase if they exist
                     try {
-                        const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
+                        const resultsDoc = await db.collection('actualResults').doc('current').get();
                         if (resultsDoc.exists) {
                             this.bracket = resultsDoc.data().predictions || {};
                         } else {
@@ -1028,17 +859,17 @@
             },
 
             async clearAll() {
-                if (confirm('Are you sure you want to clear ALL data for this bracket? This cannot be undone!')) {
+                if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
                     try {
-                        // Delete all brackets for current gender
-                        const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                        // Delete all brackets
+                        const bracketsSnapshot = await db.collection('brackets').get();
                         const deletePromises = [];
                         bracketsSnapshot.forEach(doc => {
                             deletePromises.push(doc.ref.delete());
                         });
                         
-                        // Delete actual results for current gender
-                        deletePromises.push(db.collection('actualResults-' + this.currentGender).doc('current').delete());
+                        // Delete actual results
+                        deletePromises.push(db.collection('actualResults').doc('current').delete());
                         
                         await Promise.all(deletePromises);
                         
@@ -1049,7 +880,7 @@
                         this.updateLeaderboard();
                         this.updateBracketCount();
                         this.updateChampionChart();
-                        alert('All data cleared for this bracket!');
+                        alert('All data cleared!');
                     } catch (error) {
                         alert('Error clearing data: ' + error.message);
                     }
@@ -1063,8 +894,8 @@
                 this.bracket[round][matchup] = playerId;
 
                 if (this.adminMode) {
-                    // Save actual results to Firebase with gender suffix
-                    db.collection('actualResults-' + this.currentGender).doc('current').set({
+                    // Save actual results to Firebase
+                    db.collection('actualResults').doc('current').set({
                         predictions: this.bracket,
                         timestamp: firebase.firestore.FieldValue.serverTimestamp()
                     }).then(() => {
@@ -1141,7 +972,7 @@
                             const isSelected = this.bracket[round]?.[matchIndex] === match.player1.id;
                             const classes = this.getPlayerClasses(round, matchIndex, match.player1.id, isSelected);
                             html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player1.id})">
-                                <span class="rank">${match.player1.rank}</span>
+                                <span class="seed">${match.player1.seed}</span>
                                 <span class="player-name">${match.player1.name}</span>
                                 <span class="prefecture">${match.player1.prefecture}</span>
                             </div>`;
@@ -1153,7 +984,7 @@
                             const isSelected = this.bracket[round]?.[matchIndex] === match.player2.id;
                             const classes = this.getPlayerClasses(round, matchIndex, match.player2.id, isSelected);
                             html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player2.id})">
-                                <span class="rank">${match.player2.rank}</span>
+                                <span class="seed">${match.player2.seed}</span>
                                 <span class="player-name">${match.player2.name}</span>
                                 <span class="prefecture">${match.player2.prefecture}</span>
                             </div>`;
@@ -1189,8 +1020,8 @@
 
             async updateLeaderboard() {
                 try {
-                    // Load actual results from Firebase with gender suffix
-                    const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
+                    // Load actual results from Firebase
+                    const resultsDoc = await db.collection('actualResults').doc('current').get();
                     if (!resultsDoc.exists) {
                         // No results yet - show empty message
                         document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No results entered yet. Leaderboard will appear once the admin enters tournament results.</p>';
@@ -1201,8 +1032,8 @@
                     const actualResults = resultsDoc.data().predictions || {};
                     this.actualResults = actualResults;
                     
-                    // Load all brackets from Firebase for current gender
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                    // Load all brackets from Firebase
+                    const bracketsSnapshot = await db.collection('brackets').get();
                     
                     if (bracketsSnapshot.empty) {
                         document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No brackets submitted yet.</p>';
@@ -1272,7 +1103,7 @@
                 const bracketsList = document.getElementById('bracketsList');
                 
                 try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                    const bracketsSnapshot = await db.collection('brackets').get();
                     
                     if (bracketsSnapshot.empty) {
                         bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
@@ -1302,7 +1133,7 @@
 
             async loadSpecificBracket(userName) {
                 try {
-                    const docRef = await db.collection('brackets-' + this.currentGender).doc(userName).get();
+                    const docRef = await db.collection('brackets').doc(userName).get();
                     if (docRef.exists) {
                         const data = docRef.data();
                         this.bracket = data.predictions;
