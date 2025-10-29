@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>All Japan Kendo Championship Bracket</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -338,7 +343,7 @@
         <h1>All Japan Kendo Championship Bracket</h1>
 
         <div class="instructions">
-            <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, we'll be able to see who predicted best!
+            <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, the leaderboard will show who had the closest bracket!
         </div>
 
         <div class="controls">
@@ -348,7 +353,7 @@
             </div>
             <button onclick="app.viewAllBrackets()">👥 View All Brackets</button>
             <button onclick="app.toggleAdminMode()">⚙️ Admin Mode</button>
-            <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn" style="display: none;">🏆 View Leaderboard</button>
+            <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn">🏆 View Leaderboard</button>
         </div>
 
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
@@ -378,17 +383,30 @@
     </div>
 
     <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBYTFoMl-7yV6knvbHikVHRN8dlbyIil6A",
+            authDomain: "kendo-bracket.firebaseapp.com",
+            projectId: "kendo-bracket",
+            storageBucket: "kendo-bracket.firebasestorage.app",
+            messagingSenderId: "837468107917",
+            appId: "1:837468107917:web:163051cf69519877cbdec4"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
         const app = {
             players: [],
             bracket: {},
             adminMode: false,
             currentUser: '',
+            actualResults: null,
             
             init() {
                 this.generatePlayers();
-                this.loadFromStorage();
                 this.renderBracket();
-                this.updateLeaderboard();
+                this.updateLeaderboard(); // Update leaderboard on load
             },
 
             generatePlayers() {
@@ -416,7 +434,7 @@
                     { name: 'H.HOSHINO', prefecture: 'Gunma', seed: 5 },
                     { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', seed: 5 },
                     { name: 'N.TASHIRO', prefecture: 'Fukuoka', seed: 4 },
-                    { name: 'Y.JITO', prefecture: 'Saitama', seed: 4 },
+                    { name: 'Y.ITO', prefecture: 'Saitama', seed: 4 },
                     { name: 'H.ISHIDA', prefecture: 'Yamagata', seed: 5 },
                     { name: 'R.SEIKE', prefecture: 'Osaka', seed: 5 },
                     { name: 'K.MUKUNASHI', prefecture: 'Tokyo', seed: 5 },
@@ -448,9 +466,9 @@
                     { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', seed: 6 },
                     { name: 'Y.NOMURA', prefecture: 'Kanagawa', seed: 'R7' },
                     { name: 'T.YAMURA', prefecture: 'Yamaguchi', seed: 5 },
-                    { name: 'K.HORIURO', prefecture: 'Tokyo', seed: 5 },
+                    { name: 'K.HOSHIKO', prefecture: 'Tokyo', seed: 5 },
                     { name: 'T.TSURUHAMA', prefecture: 'Osaka', seed: 2 },
-                    { name: 'Y.JITO', prefecture: 'Gifu', seed: 5 },
+                    { name: 'Y.ITO', prefecture: 'Gifu', seed: 5 },
                     { name: 'S.IZAWA', prefecture: 'Hokkaido', seed: 6 },
                     { name: 'Y.SASAKI', prefecture: 'Chiba', seed: 5 },
                     { name: 'R.NISHIDA', prefecture: 'Tokushima', seed: 6 },
@@ -475,22 +493,36 @@
                     return;
                 }
 
-                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
-                brackets[userName] = {
+                // Save to Firebase Firestore
+                db.collection('brackets').doc(userName).set({
                     predictions: this.bracket,
-                    timestamp: new Date().toISOString()
-                };
-                localStorage.setItem('brackets', JSON.stringify(brackets));
-                alert(`Bracket saved for ${userName}!`);
-                
-                // Clear name and bracket after saving
-                document.getElementById('userName').value = '';
-                this.bracket = {};
-                this.currentUser = '';
-                this.renderBracket();
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(() => {
+                    alert(`Bracket saved for ${userName}!`);
+                    
+                    // Clear name and bracket after saving
+                    document.getElementById('userName').value = '';
+                    this.bracket = {};
+                    this.currentUser = '';
+                    this.renderBracket();
+                }).catch((error) => {
+                    alert('Error saving bracket: ' + error.message);
+                });
             },
 
-            toggleAdminMode() {
+            async loadFromFirebase() {
+                try {
+                    // Check if actual results exist
+                    const resultsDoc = await db.collection('actualResults').doc('current').get();
+                    if (resultsDoc.exists) {
+                        document.getElementById('leaderboardBtn').style.display = 'inline-block';
+                    }
+                } catch (error) {
+                    console.error('Error loading from Firebase:', error);
+                }
+            },
+
+            async toggleAdminMode() {
                 if (!this.adminMode) {
                     // Trying to enter admin mode - require password
                     const password = prompt('Enter admin password:');
@@ -504,11 +536,16 @@
                     document.getElementById('userName').value = '';
                     this.currentUser = '';
                     
-                    // Load actual results if they exist
-                    const actualResults = localStorage.getItem('actualResults');
-                    if (actualResults) {
-                        this.bracket = JSON.parse(actualResults);
-                    } else {
+                    // Load actual results from Firebase if they exist
+                    try {
+                        const resultsDoc = await db.collection('actualResults').doc('current').get();
+                        if (resultsDoc.exists) {
+                            this.bracket = resultsDoc.data().predictions || {};
+                        } else {
+                            this.bracket = {};
+                        }
+                    } catch (error) {
+                        console.error('Error loading results:', error);
                         this.bracket = {};
                     }
                 } else {
@@ -534,23 +571,30 @@
                 this.renderBracket();
             },
 
-            clearAll() {
+            async clearAll() {
                 if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
-                    localStorage.clear();
-                    this.bracket = {};
-                    this.adminMode = false;
-                    document.getElementById('userName').value = '';
-                    this.renderBracket();
-                    this.updateLeaderboard();
-                    alert('All data cleared!');
-                }
-            },
-
-            loadFromStorage() {
-                const results = localStorage.getItem('actualResults');
-                if (results) {
-                    // Don't automatically show leaderboard, just make button available
-                    document.getElementById('leaderboardBtn').style.display = 'inline-block';
+                    try {
+                        // Delete all brackets
+                        const bracketsSnapshot = await db.collection('brackets').get();
+                        const deletePromises = [];
+                        bracketsSnapshot.forEach(doc => {
+                            deletePromises.push(doc.ref.delete());
+                        });
+                        
+                        // Delete actual results
+                        deletePromises.push(db.collection('actualResults').doc('current').delete());
+                        
+                        await Promise.all(deletePromises);
+                        
+                        this.bracket = {};
+                        this.adminMode = false;
+                        document.getElementById('userName').value = '';
+                        this.renderBracket();
+                        this.updateLeaderboard();
+                        alert('All data cleared!');
+                    } catch (error) {
+                        alert('Error clearing data: ' + error.message);
+                    }
                 }
             },
 
@@ -561,8 +605,15 @@
                 this.bracket[round][matchup] = playerId;
 
                 if (this.adminMode) {
-                    localStorage.setItem('actualResults', JSON.stringify(this.bracket));
-                    this.updateLeaderboard();
+                    // Save actual results to Firebase
+                    db.collection('actualResults').doc('current').set({
+                        predictions: this.bracket,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => {
+                        this.updateLeaderboard();
+                    }).catch((error) => {
+                        console.error('Error saving results:', error);
+                    });
                 }
 
                 this.renderBracket();
@@ -653,10 +704,9 @@
                 let classes = '';
                 if (isSelected) classes += 'selected ';
 
-                if (!this.adminMode) {
-                    const actualResults = JSON.parse(localStorage.getItem('actualResults') || '{}');
-                    if (actualResults[round]?.[matchIndex]) {
-                        if (actualResults[round][matchIndex] === playerId) {
+                if (!this.adminMode && this.actualResults) {
+                    if (this.actualResults[round]?.[matchIndex]) {
+                        if (this.actualResults[round][matchIndex] === playerId) {
                             classes += 'correct';
                         } else if (isSelected) {
                             classes += 'incorrect';
@@ -667,48 +717,69 @@
                 return classes;
             },
 
-            updateLeaderboard() {
-                const actualResults = JSON.parse(localStorage.getItem('actualResults') || '{}');
-                if (Object.keys(actualResults).length === 0) {
-                    document.getElementById('leaderboard').style.display = 'none';
-                    document.getElementById('leaderboardBtn').style.display = 'none';
-                    return;
-                }
-
-                // Show leaderboard button if results exist
-                document.getElementById('leaderboardBtn').style.display = 'inline-block';
-                
-                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
-                
-                const scores = Object.entries(brackets).map(([name, data]) => {
-                    let score = 0;
-                    let roundPoints = [1, 2, 4, 8, 16, 32]; // Points per round
-
-                    for (let round = 0; round < 6; round++) {
-                        const userPicks = data.predictions[round] || {};
-                        const actual = actualResults[round] || {};
-
-                        Object.keys(actual).forEach(matchup => {
-                            if (userPicks[matchup] === actual[matchup]) {
-                                score += roundPoints[round];
-                            }
-                        });
+            async updateLeaderboard() {
+                try {
+                    // Load actual results from Firebase
+                    const resultsDoc = await db.collection('actualResults').doc('current').get();
+                    if (!resultsDoc.exists) {
+                        // No results yet - show empty message
+                        document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No results entered yet. Leaderboard will appear once the admin enters tournament results.</p>';
+                        this.actualResults = null;
+                        return;
                     }
 
-                    return { name, score };
-                }).sort((a, b) => b.score - a.score);
+                    const actualResults = resultsDoc.data().predictions || {};
+                    this.actualResults = actualResults;
+                    
+                    // Load all brackets from Firebase
+                    const bracketsSnapshot = await db.collection('brackets').get();
+                    
+                    if (bracketsSnapshot.empty) {
+                        document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No brackets submitted yet.</p>';
+                        return;
+                    }
+                    
+                    const scores = [];
 
-                let html = '';
-                scores.forEach((entry, index) => {
-                    const topClass = index < 3 ? 'top' : '';
-                    const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
-                    html += `<div class="leaderboard-entry ${topClass}">
-                        <span><span class="rank">#${index + 1}</span> ${medal} ${entry.name}</span>
-                        <span><strong>${entry.score}</strong> points</span>
-                    </div>`;
-                });
+                    bracketsSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        let score = 0;
+                        let roundPoints = [1, 2, 4, 8, 16, 32]; // Points per round
 
-                document.getElementById('leaderboardContent').innerHTML = html;
+                        for (let round = 0; round < 6; round++) {
+                            const userPicks = data.predictions[round] || {};
+                            const actual = actualResults[round] || {};
+
+                            Object.keys(actual).forEach(matchup => {
+                                if (userPicks[matchup] === actual[matchup]) {
+                                    score += roundPoints[round];
+                                }
+                            });
+                        }
+
+                        scores.push({ name: doc.id, score });
+                    });
+
+                    scores.sort((a, b) => b.score - a.score);
+
+                    let html = '';
+                    scores.forEach((entry, index) => {
+                        const topClass = index < 3 ? 'top' : '';
+                        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                        html += `<div class="leaderboard-entry ${topClass}">
+                            <span><span class="rank">#${index + 1}</span> ${medal} ${entry.name}</span>
+                            <span><strong>${entry.score}</strong> points</span>
+                        </div>`;
+                    });
+
+                    document.getElementById('leaderboardContent').innerHTML = html;
+                    
+                    // Re-render bracket to show correct/incorrect picks
+                    this.renderBracket();
+                } catch (error) {
+                    console.error('Error updating leaderboard:', error);
+                    document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading leaderboard</p>';
+                }
             },
 
             toggleLeaderboard() {
@@ -721,44 +792,58 @@
                 }
             },
 
-            viewAllBrackets() {
+            async viewAllBrackets() {
                 // Clear name and bracket
                 document.getElementById('userName').value = '';
                 this.bracket = {};
                 this.currentUser = '';
                 this.renderBracket();
                 
-                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
                 const bracketsList = document.getElementById('bracketsList');
                 
-                if (Object.keys(brackets).length === 0) {
-                    bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
-                } else {
-                    let html = '';
-                    Object.entries(brackets).forEach(([name, data]) => {
-                        const date = new Date(data.timestamp).toLocaleString();
-                        html += `<div class="bracket-item" onclick="app.loadSpecificBracket('${name}')">
-                            <div class="bracket-info">
-                                <div class="bracket-name">${name}</div>
-                                <div class="bracket-date">Saved: ${date}</div>
-                            </div>
-                            <button onclick="event.stopPropagation(); app.loadSpecificBracket('${name}')">View →</button>
-                        </div>`;
-                    });
-                    bracketsList.innerHTML = html;
+                try {
+                    const bracketsSnapshot = await db.collection('brackets').get();
+                    
+                    if (bracketsSnapshot.empty) {
+                        bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
+                    } else {
+                        let html = '';
+                        bracketsSnapshot.forEach(doc => {
+                            const data = doc.data();
+                            const name = doc.id;
+                            const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Unknown date';
+                            html += `<div class="bracket-item" onclick="app.loadSpecificBracket('${name}')">
+                                <div class="bracket-info">
+                                    <div class="bracket-name">${name}</div>
+                                    <div class="bracket-date">Saved: ${date}</div>
+                                </div>
+                                <button onclick="event.stopPropagation(); app.loadSpecificBracket('${name}')">View →</button>
+                            </div>`;
+                        });
+                        bracketsList.innerHTML = html;
+                    }
+                } catch (error) {
+                    bracketsList.innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading brackets</p>';
+                    console.error('Error loading brackets:', error);
                 }
                 
                 document.getElementById('bracketsModal').style.display = 'block';
             },
 
-            loadSpecificBracket(userName) {
-                const brackets = JSON.parse(localStorage.getItem('brackets') || '{}');
-                if (brackets[userName]) {
-                    this.bracket = brackets[userName].predictions;
-                    this.currentUser = userName;
-                    document.getElementById('userName').value = userName;
-                    this.renderBracket();
-                    this.closeModal();
+            async loadSpecificBracket(userName) {
+                try {
+                    const docRef = await db.collection('brackets').doc(userName).get();
+                    if (docRef.exists) {
+                        const data = docRef.data();
+                        this.bracket = data.predictions;
+                        this.currentUser = userName;
+                        document.getElementById('userName').value = userName;
+                        this.renderBracket();
+                        this.closeModal();
+                    }
+                } catch (error) {
+                    console.error('Error loading bracket:', error);
+                    alert('Error loading bracket');
                 }
             },
 
