@@ -1236,14 +1236,29 @@
                         scores.push({ name: doc.id, score });
                     });
 
-                    scores.sort((a, b) => b.score - a.score);
+                    // Sort by score (descending), then by name (alphabetically) for ties
+                    scores.sort((a, b) => {
+                        if (b.score !== a.score) {
+                            return b.score - a.score;
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
 
                     let html = '';
+                    let currentRank = 1;
+                    let previousScore = null;
+
                     scores.forEach((entry, index) => {
-                        const topClass = index < 3 ? 'top' : '';
-                        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+                        // Update rank only if score is different from previous
+                        if (previousScore !== null && entry.score !== previousScore) {
+                            currentRank = index + 1;
+                        }
+                        previousScore = entry.score;
+                        
+                        const topClass = currentRank <= 3 ? 'top' : '';
+                        const medal = currentRank === 1 ? '🥇' : currentRank === 2 ? '🥈' : currentRank === 3 ? '🥉' : '';
                         html += `<div class="leaderboard-entry ${topClass}">
-                            <span><span class="rank">#${index + 1}</span> ${medal} ${entry.name}</span>
+                            <span><span class="rank">#${currentRank}</span> ${medal} ${entry.name}</span>
                             <span><strong>${entry.score}</strong> points</span>
                         </div>`;
                     });
