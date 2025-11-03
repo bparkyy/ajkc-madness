@@ -1268,43 +1268,50 @@
                 }
             },
 
-            async viewAllBrackets() {
-                // Clear name and bracket
-                document.getElementById('userName').value = '';
-                this.bracket = {};
-                this.currentUser = '';
-                this.renderBracket();
+        async viewAllBrackets() {
+            document.getElementById('userName').value = '';
+            this.bracket = {};
+            this.currentUser = '';
+            this.renderBracket();
+            
+            const bracketsList = document.getElementById('bracketsList');
+            
+            try {
+                const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
                 
-                const bracketsList = document.getElementById('bracketsList');
-                
-                try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
+                if (bracketsSnapshot.empty) {
+                    bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
+                } else {
+                    let html = '';
+                    bracketsSnapshot.forEach(doc => {
+                        const data = doc.data();
+                        const name = doc.id;
+                        const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Unknown date';
+                        html += `<div class="bracket-item" data-username="${name.replace(/"/g, '&quot;')}">
+                            <div class="bracket-info">
+                                <div class="bracket-name">${name}</div>
+                                <div class="bracket-date">Saved: ${date}</div>
+                            </div>
+                            <button class="view-bracket-btn">View →</button>
+                        </div>`;
+                    });
+                    bracketsList.innerHTML = html;
                     
-                    if (bracketsSnapshot.empty) {
-                        bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
-                    } else {
-                        let html = '';
-                        bracketsSnapshot.forEach(doc => {
-                            const data = doc.data();
-                            const name = doc.id;
-                            const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Unknown date';
-                            html += `<div class="bracket-item" onclick="app.loadSpecificBracket('${name}')">
-                                <div class="bracket-info">
-                                    <div class="bracket-name">${name}</div>
-                                    <div class="bracket-date">Saved: ${date}</div>
-                                </div>
-                                <button onclick="event.stopPropagation(); app.loadSpecificBracket('${name}')">View →</button>
-                            </div>`;
+                    // Add event listeners after HTML is inserted
+                    document.querySelectorAll('.bracket-item').forEach(item => {
+                        item.addEventListener('click', () => {
+                            const username = item.getAttribute('data-username');
+                            app.loadSpecificBracket(username);
                         });
-                        bracketsList.innerHTML = html;
-                    }
-                } catch (error) {
-                    bracketsList.innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading brackets</p>';
-                    console.error('Error loading brackets:', error);
+                    });
                 }
-                
-                document.getElementById('bracketsModal').style.display = 'block';
-            },
+            } catch (error) {
+                bracketsList.innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading brackets</p>';
+                console.error('Error loading brackets:', error);
+            }
+            
+            document.getElementById('bracketsModal').style.display = 'block';
+        },
 
             async loadSpecificBracket(userName) {
                 try {
