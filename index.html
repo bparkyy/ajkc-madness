@@ -612,6 +612,7 @@
                 this.generatePlayers();
                 this.players = this.menPlayers; // Start with men's bracket
                 await this.checkLockStatus();
+                await this.loadActualResults();
                 this.renderBracket();
                 this.updateLeaderboard();
                 await this.updateBracketCount();
@@ -783,6 +784,7 @@
                 
                 // Reload data for this gender
                 this.checkLockStatus();
+                this.loadActualResults();
                 this.renderBracket();
                 this.updateLeaderboard();
                 this.updateBracketCount();
@@ -1347,8 +1349,26 @@
 
             closeModal() {
                 document.getElementById('bracketsModal').style.display = 'none';
+            }, 
+
+            async loadActualResults() {
+                try {
+                    const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
+                    if (resultsDoc.exists) {
+                        const actualResults = resultsDoc.data().predictions || {};
+                        this.actualResults = actualResults;
+                        // For non-admin users, display the actual results in the bracket
+                        if (!this.adminMode) {
+                            this.bracket = actualResults;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading actual results:', error);
+                }
             }
         };
+
+        
 
         // Initialize the app
         app.init();
