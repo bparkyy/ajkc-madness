@@ -1082,9 +1082,9 @@ button.danger:hover {
 }
 
 .modal-content {
-    background-color: #2a2a3e;
+    background-color: var(--surface-1);
     color: rgba(255,255,255,0.85);
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.08);
     margin: 50px auto;
     padding: 30px;
     border-radius: 12px;
@@ -3083,6 +3083,186 @@ select.submit-name-input option {
     padding: 4px 8px;
 }
 
+/* ── Donate ── */
+.landing-nav-donate {
+    color: var(--kendo-gold) !important;
+}
+
+.donate-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.donate-btn {
+    display: block;
+    width: 100%;
+    max-width: 280px;
+    padding: 12px 24px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9em;
+    letter-spacing: 2px;
+    text-align: center;
+    text-decoration: none;
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.donate-btn:hover {
+    border-color: rgba(255,255,255,0.3);
+    color: white;
+}
+
+.donate-btn-gold {
+    background: var(--kendo-gold);
+    color: var(--kendo-dark);
+    border-color: var(--kendo-gold);
+}
+
+.donate-btn-gold:hover {
+    box-shadow: 0 4px 16px rgba(212, 168, 67, 0.3);
+    color: var(--kendo-dark);
+}
+
+/* ── Footer ── */
+.site-footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 40px 24px 0;
+    margin-top: 60px;
+}
+
+.footer-content {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    padding-bottom: 30px;
+}
+
+.footer-brand {
+    flex: 1;
+}
+
+.footer-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3em;
+    color: var(--kendo-gold);
+    letter-spacing: 3px;
+}
+
+.footer-tagline {
+    color: rgba(255,255,255,0.25);
+    font-size: 0.75em;
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+.footer-links {
+    display: flex;
+    gap: 40px;
+}
+
+.footer-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.footer-col h4 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.75em;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 4px;
+}
+
+.footer-col a {
+    color: rgba(255,255,255,0.5);
+    text-decoration: none;
+    font-size: 0.8em;
+    transition: color 0.2s;
+}
+
+.footer-col a:hover {
+    color: var(--kendo-gold);
+}
+
+.footer-bottom {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 16px 0;
+    display: flex;
+    justify-content: space-between;
+    max-width: 800px;
+    margin: 0 auto;
+    color: rgba(255,255,255,0.2);
+    font-size: 0.7em;
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 2px;
+}
+
+@media (max-width: 600px) {
+    .footer-content { flex-direction: column; gap: 24px; }
+    .footer-links { flex-direction: column; gap: 20px; }
+    .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+}
+
+/* ── Ad slots ── */
+.ad-slot {
+    min-height: 0;
+    text-align: center;
+    margin: 20px auto;
+    max-width: 728px;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.ad-slot:empty {
+    display: block;
+    min-height: 90px;
+    border: 1px dashed rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.15);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.8em;
+    letter-spacing: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ad-slot:empty::after {
+    content: 'AD SPACE';
+}
+
+.bracket-content-with-sidebar {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.bracket-main-col {
+    flex: 1;
+    min-width: 0;
+}
+
+.ad-sidebar {
+    flex: 0 0 160px;
+    min-height: 600px;
+    max-width: 160px;
+    position: sticky;
+    top: 60px;
+}
+
+@media (max-width: 1200px) {
+    .ad-sidebar { display: none; }
+    .bracket-content-with-sidebar { display: block; }
+}
+
 /* ── Toast notifications ── */
 .toast-container {
     position: fixed;
@@ -3159,16 +3339,41 @@ select.submit-name-input option {
     /* Leaderboard */
     .lb-modal { max-width: 100% !important; }
     .lb-podium { flex-direction: column; align-items: center; gap: 12px; padding: 0; }
-    .lb-podium-item { max-width: 100%; width: 100%; }
+    .lb-podium-item { max-width: 100%; width: 100%; padding: 14px 12px; }
     .lb-podium-center { transform: none; }
-    .lb-table-header, .lb-row { grid-template-columns: 40px 1fr 70px 100px; font-size: 0.85em; }
+    .lb-podium-rank { font-size: 1.4em; }
+    .lb-podium-name { font-size: 0.95em; }
+    .lb-podium-pts { font-size: 1.4em; }
+    .lb-podium-view { font-size: 0.6em; }
+    .lb-table-header { grid-template-columns: 35px 1fr 60px 80px; font-size: 0.6em; padding: 8px 10px; }
+    .lb-row { grid-template-columns: 35px 1fr 60px 80px; font-size: 0.8em; padding: 10px 10px; }
     .lb-row-date { display: none; }
+    .lb-row-rank { font-size: 0.95em; }
+    .lb-row-name { font-size: 0.8em; }
+    .lb-row-loc { display: none; }
+    .lb-row-pts { font-size: 1em; }
+    .lb-row-you { padding-left: 8px; }
+    .lb-tabs { gap: 0; }
+    .lb-tab { padding: 8px 12px; font-size: 0.75em; }
 
     /* Stats */
     .stat-cards { flex-direction: column; align-items: stretch; }
-    .stat-card { max-width: 100%; }
+    .stat-card { max-width: 100%; padding: 14px 12px; }
+    .stat-number { font-size: 2em; }
     .stats-grid { grid-template-columns: 1fr; }
     .badge-grid { grid-template-columns: 1fr 1fr; }
+    .podium { flex-direction: column; align-items: center; gap: 8px; }
+    .podium-item { width: 100%; }
+    .podium-1 { transform: none; order: 0; }
+    .podium-2 { order: 1; }
+    .podium-3 { order: 2; }
+    .controversial-matchup { flex-direction: column; gap: 8px; }
+    .controversial-bar { min-width: 100%; }
+    .popularity-name { min-width: 70px; font-size: 0.8em; }
+
+    /* Modals general */
+    .modal-content { margin: 16px auto; padding: 16px; width: 95%; max-height: 85vh; }
+    .modal-header h2 { font-size: 1.2em !important; }
 
     /* Scoring rules */
     .sr-ribbon { flex-wrap: wrap; }
@@ -3187,8 +3392,16 @@ select.submit-name-input option {
 
 @media (max-width: 400px) {
     .bracket-page-title { font-size: 1.6em; }
-    .bracket-scoring-cards { grid-template-columns: repeat(3, 1fr); }
     .badge-grid { grid-template-columns: 1fr; }
-    .lb-table-header, .lb-row { grid-template-columns: 35px 1fr 60px; }
+    .lb-table-header { grid-template-columns: 30px 1fr 55px; font-size: 0.55em; }
+    .lb-row { grid-template-columns: 30px 1fr 55px; }
     .lb-row-correct { display: none; }
+    .lb-row-name { font-size: 0.75em; }
+    .sr-ribbon { gap: 4px; }
+    .sr-ribbon-card { padding: 10px 4px; }
+    .sr-ribbon-pts { font-size: 1em; }
+    .sr-ribbon-round { font-size: 0.6em; }
+    .stat-number { font-size: 1.6em; }
+    .popularity-bar-row { font-size: 0.75em; }
+    .popularity-name { min-width: 55px; }
 }

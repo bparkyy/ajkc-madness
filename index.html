@@ -33,6 +33,7 @@
             <span class="landing-nav-logo">AJKC MADNESS</span>
             <div class="landing-nav-links">
                 <a href="#howToPlay">HOW TO PLAY</a>
+                <a href="#" onclick="event.preventDefault();app.showDonateModal()" class="landing-nav-donate">DONATE</a>
                 <a href="#" onclick="event.preventDefault();app.showSignInModal()" id="landingSignIn" class="landing-nav-signin">SIGN IN</a>
             </div>
         </nav>
@@ -91,7 +92,44 @@
                 </div>
             </section>
 
+            <!-- Ad slot: Landing page -->
+            <div class="ad-slot" id="adLanding"></div>
+
         </div>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="footer-logo">AJKC MADNESS</span>
+                    <p class="footer-tagline">All Japan Kendo Championship Bracket Challenge</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h4>FOLLOW US</h4>
+                        <a href="#" target="_blank">Instagram</a>
+                        <a href="#" target="_blank">Twitter / X</a>
+                        <a href="#" target="_blank">YouTube</a>
+                        <a href="#" target="_blank">TikTok</a>
+                    </div>
+                    <div class="footer-col">
+                        <h4>CONNECT</h4>
+                        <a href="mailto:contact@ajkcmadness.com">Contact Us</a>
+                        <a href="#">Sponsorship Inquiries</a>
+                        <a href="#">Partnership</a>
+                    </div>
+                    <div class="footer-col">
+                        <h4>LEGAL</h4>
+                        <a href="#">Privacy Policy</a>
+                        <a href="#">Terms of Service</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>© 2026 AJKC Madness. All rights reserved.</span>
+                <span>ajkcmadness.com</span>
+            </div>
+        </footer>
     </div>
 
     <!-- ══════ Main App (hidden initially) ══════ -->
@@ -151,6 +189,29 @@
         </div>
 
         <div class="leaderboard" id="leaderboard" style="display: none;"></div>
+    </div>
+
+    <!-- Donate modal -->
+    <div id="donateModal" class="modal">
+        <div class="modal-content" style="max-width:480px;">
+            <div class="modal-header">
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">SUPPORT AJKC MADNESS</h2>
+                <span class="close" onclick="app.closeDonateModal()">&times;</span>
+            </div>
+            <div style="padding:8px 0 20px;">
+                <p style="color:rgba(255,255,255,0.5);font-size:0.85em;line-height:1.6;margin-bottom:20px;text-align:center;">
+                    Help us keep this bracket challenge running and support the kendo community. Every contribution goes toward hosting, development, and future tournaments.
+                </p>
+                <div class="donate-options">
+                    <a href="#" class="donate-btn" target="_blank">DONATE VIA PAYPAL</a>
+                    <a href="#" class="donate-btn" target="_blank">DONATE VIA VENMO</a>
+                    <a href="#" class="donate-btn donate-btn-gold" target="_blank">BUY ME A COFFEE</a>
+                </div>
+                <p style="color:rgba(255,255,255,0.25);font-size:0.7em;text-align:center;margin-top:16px;">
+                    Thank you for supporting kendo!
+                </p>
+            </div>
+        </div>
     </div>
 
     <!-- Scoring Rules modal -->

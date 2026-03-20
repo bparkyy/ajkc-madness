@@ -106,6 +106,8 @@ const UI = {
                     <div class="winner-chips">${winnersHtml}</div>
                 </div>
                 <button class="continue-btn" onclick="${btnAction}">${btnText}</button>
+                <!-- Ad slot: Between rounds -->
+                <div class="ad-slot" id="adRoundTransition"></div>
             </div>`;
     },
 
@@ -177,7 +179,7 @@ const UI = {
                 <span class="bracket-stat-label">CHOSEN CHAMPION</span>
                 <span class="bracket-stat-value">${this.escapeHtml(championDisplay)}</span>
             </div>
-            <div class="bracket-stat-card">
+            <div class="bracket-stat-card" style="cursor:help;" title="How often your picks match the most popular choice for each matchup">
                 <span class="bracket-stat-label">CROWD SIMILARITY</span>
                 <span class="bracket-stat-value" id="bracketSimilarity">—</span>
             </div>
@@ -261,8 +263,16 @@ const UI = {
                 ${reminderHtml}
                 ${incompleteHtml}
                 ${resumeHtml}
-                <div style="text-align:center">${legendHtml}</div>
-                ${bracketVisualHtml}
+                <div class="bracket-content-with-sidebar">
+                    <div class="bracket-main-col">
+                        <div style="text-align:center">${legendHtml}</div>
+                        ${bracketVisualHtml}
+                        <!-- Ad slot: Below bracket tree -->
+                        <div class="ad-slot" id="adBelowBracket"></div>
+                    </div>
+                    <!-- Ad slot: Sidebar on desktop -->
+                    <div class="ad-slot ad-sidebar" id="adSidebar"></div>
+                </div>
             </div>`;
     }
 };

@@ -107,7 +107,6 @@ const app = {
         document.getElementById('mainApp').style.display = 'block';
 
         this.switchGender(gender);
-        this.initBracket();
     },
 
     goHome() {
@@ -197,7 +196,12 @@ const app = {
         if (el) el.classList.add('active');
     },
 
+    _closeNav() {
+        document.querySelector('.app-nav')?.classList.remove('nav-open');
+    },
+
     showSignInModal() {
+        this._closeNav();
         const user = this.currentUser;
         const content = document.getElementById('signInContent');
         if (user && !user.isAnonymous && user.email) {
@@ -218,9 +222,9 @@ const app = {
                             SIGN IN WITH GOOGLE
                         </button>
                         <div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.8em;">or</div>
-                        <div style="display:flex;gap:8px;">
-                            <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;" />
-                            <button class="bracket-action-btn" onclick="app.sendEmailLink()">SEND LINK</button>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;min-width:180px;" />
+                            <button class="bracket-action-btn" onclick="app.sendEmailLink()" style="white-space:nowrap;">SEND LINK</button>
                         </div>
                         <p style="color:rgba(255,255,255,0.3);font-size:0.75em;text-align:center;">
                             We'll send a sign-in link — no password needed.
@@ -436,9 +440,9 @@ const app = {
                         SIGN IN WITH GOOGLE
                     </button>
                     <div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.8em;">or</div>
-                    <div style="display:flex;gap:8px;">
-                        <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;" />
-                        <button class="bracket-action-btn" onclick="app.sendEmailLink()">SEND LINK</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;min-width:180px;" />
+                        <button class="bracket-action-btn" onclick="app.sendEmailLink()" style="white-space:nowrap;">SEND LINK</button>
                     </div>
                     <button class="bracket-action-btn" onclick="app.closeSignInModal()" style="width:100%;text-align:center;opacity:0.5;">
                         MAYBE LATER
@@ -766,7 +770,15 @@ const app = {
             this.invalidateDownstream(round, matchIndex);
         }
 
-        this.render();
+        // Visually highlight picked card without full re-render
+        document.querySelectorAll('.player-card').forEach(c => c.classList.remove('picked'));
+        // Find the card by matching the onclick attribute containing the playerId
+        document.querySelectorAll('.player-card').forEach(c => {
+            const attr = c.getAttribute('onclick') || '';
+            if (attr.includes(`, ${playerId})`)) c.classList.add('picked');
+        });
+        const nextBtn = document.querySelector('.game-nav button:last-child');
+        if (nextBtn) nextBtn.disabled = false;
 
         // Confetti on champion pick
         if (round === 5) {
@@ -1502,6 +1514,7 @@ const app = {
     },
 
     showLeaderboard() {
+        this._closeNav();
         this._lbGender = this.currentGender;
         document.getElementById('lbMenTab')?.classList.toggle('active', this.currentGender === 'men');
         document.getElementById('lbWomenTab')?.classList.toggle('active', this.currentGender === 'women');
@@ -1551,6 +1564,7 @@ const app = {
     // ── View all brackets ───────────────────────────────────────
 
     async viewAllBrackets() {
+        this._closeNav();
         const bracketsList = document.getElementById('bracketsList');
         const searchInput = document.getElementById('bracketSearch');
         if (searchInput) searchInput.value = '';
@@ -1637,6 +1651,7 @@ const app = {
     },
 
     viewMyBracket() {
+        this._closeNav();
         this.viewingOtherBracket = false;
         UI.showBackToMine(false);
         this._setActiveNav('navMyBracket');
@@ -1686,6 +1701,7 @@ const app = {
     _statsCharts: [],
 
     async showStats() {
+        this._closeNav();
         const content = document.getElementById('statsContent');
         content.innerHTML = '<p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading stats...</p>';
         document.getElementById('statsModal').style.display = 'block';
@@ -2218,11 +2234,20 @@ const app = {
     // ── Scoring Rules ───────────────────────────────────────────
 
     showScoringRules() {
+        this._closeNav();
         document.getElementById('scoringRulesModal').style.display = 'block';
     },
 
     closeScoringRules() {
         document.getElementById('scoringRulesModal').style.display = 'none';
+    },
+
+    showDonateModal() {
+        document.getElementById('donateModal').style.display = 'block';
+    },
+
+    closeDonateModal() {
+        document.getElementById('donateModal').style.display = 'none';
     },
 
     // ── Odds toggle ───────────────────────────────────────────
@@ -2287,6 +2312,9 @@ window.addEventListener('click', event => {
     }
     if (event.target === document.getElementById('scoringRulesModal')) {
         app.closeScoringRules();
+    }
+    if (event.target === document.getElementById('donateModal')) {
+        app.closeDonateModal();
     }
     // Close menu when clicking outside
     const menu = document.getElementById('menuDropdown');
