@@ -42,9 +42,7 @@ const UI = {
         };
 
         const oddsToggle = showOdds && odds && odds.total > 0
-            ? `<div class="crowd-prediction-bar">
-                <span class="crowd-pcts">${odds.p1Pct}% vs ${odds.p2Pct}%</span>
-            </div>`
+            ? `<div class="crowd-pcts-inline">${odds.p1Pct}% vs ${odds.p2Pct}%</div>`
             : '';
 
         const oddsCheckbox = `<div class="odds-toggle">
@@ -69,7 +67,6 @@ const UI = {
                     <div class="game-progress"><div class="game-progress-fill" style="width:${progress}%"></div></div>
                 </div>
                 ${oddsCheckbox}
-                ${oddsToggle}
                 <div class="card-matchup">
                     ${card(player1, currentPick === player1?.id, odds ? odds.p1Pct : null)}
                     <div class="vs-divider">${isFinals ? '\u2694\ufe0f' : 'VS'}</div>
@@ -101,13 +98,13 @@ const UI = {
                     <h2 class="round-complete-title">${this.escapeHtml(roundName)}</h2>
                     <p class="round-complete-jp">${this.escapeHtml(roundNameJp || '')} 完了</p>
                 </div>
+                <!-- Ad slot: Between rounds -->
+                <div class="ad-slot" id="adRoundTransition"></div>
                 <div class="round-complete-ticker">
                     <p class="ticker-label">${picks.length} winners advance</p>
                     <div class="winner-chips">${winnersHtml}</div>
                 </div>
                 <button class="continue-btn" onclick="${btnAction}">${btnText}</button>
-                <!-- Ad slot: Between rounds -->
-                <div class="ad-slot" id="adRoundTransition"></div>
             </div>`;
     },
 
@@ -258,21 +255,17 @@ const UI = {
                     ${actionBtns}
                 </div>
                 ${statsBar}
+                <!-- Ad slot: Below stats bar -->
+                <div class="ad-slot" id="adBracketStats"></div>
                 ${genderTabs}
                 ${nameHtml}
                 ${reminderHtml}
                 ${incompleteHtml}
                 ${resumeHtml}
-                <div class="bracket-content-with-sidebar">
-                    <div class="bracket-main-col">
-                        <div style="text-align:center">${legendHtml}</div>
-                        ${bracketVisualHtml}
-                        <!-- Ad slot: Below bracket tree -->
-                        <div class="ad-slot" id="adBelowBracket"></div>
-                    </div>
-                    <!-- Ad slot: Sidebar on desktop -->
-                    <div class="ad-slot ad-sidebar" id="adSidebar"></div>
-                </div>
+                <div style="text-align:center">${legendHtml}</div>
+                ${bracketVisualHtml}
+                <!-- Ad slot: Below bracket tree -->
+                <div class="ad-slot" id="adBelowBracket"></div>
             </div>`;
     }
 };

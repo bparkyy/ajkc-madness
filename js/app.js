@@ -33,6 +33,7 @@ const app = {
 
     // Game flow state
     gameState: 'picking',   // 'picking' | 'round-summary' | 'bracket-summary'
+    currentView: 'bracket', // 'bracket' | 'leaderboard' | 'stats' | 'allBrackets'
     gameRound: 0,
     gameMatch: 0,
     _advanceTimeout: null,
@@ -359,6 +360,9 @@ const app = {
 
         showToast('Generating screenshot...', 'info');
 
+        // Remove scale transform so we capture at full size
+        this._resetBracketScale();
+
         // Temporarily add title header and footer to the bracket area
         const titleEl = document.createElement('div');
         titleEl.className = 'screenshot-title';
@@ -378,7 +382,13 @@ const app = {
         bracketArea.insertBefore(titleEl, bracketArea.firstChild);
         bracketArea.appendChild(footerEl);
 
-        // Redraw SVG lines to match current layout
+        // Temporarily expand wrapper to full natural size for capture
+        const wrapperOldHeight = bracketArea.style.height;
+        const wrapperOldOverflow = bracketArea.style.overflow;
+        bracketArea.style.height = 'auto';
+        bracketArea.style.overflow = 'visible';
+
+        // Redraw SVG lines at full unscaled size
         this.drawBracketSVG();
 
         try {
@@ -388,7 +398,9 @@ const app = {
                 useCORS: true,
                 logging: false,
                 scrollX: 0,
-                scrollY: -window.scrollY
+                scrollY: -window.scrollY,
+                width: bracketArea.scrollWidth,
+                height: bracketArea.scrollHeight
             });
 
             canvas.toBlob(blob => {
@@ -404,9 +416,13 @@ const app = {
             console.error('Screenshot error:', e);
             showToast('Error generating screenshot', 'error');
         } finally {
-            // Remove temporary elements and redraw SVG
+            // Remove temporary elements, restore wrapper, redraw and rescale
             document.querySelectorAll('.screenshot-title').forEach(el => el.remove());
+            bracketArea.style.height = wrapperOldHeight;
+            bracketArea.style.overflow = wrapperOldOverflow;
+            this._resetBracketScale();
             this.drawBracketSVG();
+            this._scaleBracketToFit();
         }
     },
 
@@ -976,6 +992,12 @@ const app = {
         bracketContainer.style.display = 'none';
         gameContainer.style.display = 'block';
 
+        // Non-bracket views
+        if (this.currentView === 'leaderboard') { this.renderLeaderboardPage(); return; }
+        if (this.currentView === 'stats') { this.renderStatsPage(); return; }
+        if (this.currentView === 'allBrackets') { this.renderAllBracketsPage(); return; }
+        if (this.currentView === 'legal') { this.renderLegalPage(); return; }
+
         // Set round intensity on body for progressive atmosphere
         if (this.gameState === 'picking') {
             document.body.dataset.intensity = this.gameRound;
@@ -1207,9 +1229,38 @@ const app = {
     // ── SVG bracket connector lines ──────────────────────────────
 
     scheduleBracketRedraw(containerId) {
-        requestAnimationFrame(() => this.drawBracketSVG(containerId));
-        // Also attach resize watcher
+        requestAnimationFrame(() => {
+            // Reset scale, draw SVG at natural size, then scale down
+            this._resetBracketScale();
+            this.drawBracketSVG(containerId);
+            this._scaleBracketToFit();
+        });
         this._attachBracketResizeWatcher(containerId);
+    },
+
+    _resetBracketScale() {
+        const bracket = document.querySelector('.ncaa-bracket');
+        const wrapper = document.querySelector('.bracket-tree-wrapper');
+        if (bracket) {
+            bracket.style.transform = '';
+            bracket.style.transformOrigin = '';
+        }
+        if (wrapper) wrapper.style.height = '';
+    },
+
+    _scaleBracketToFit() {
+        const bracket = document.querySelector('.ncaa-bracket');
+        const wrapper = document.querySelector('.bracket-tree-wrapper');
+        if (!bracket || !wrapper) return;
+        const bracketW = bracket.scrollWidth;
+        const bracketH = bracket.scrollHeight;
+        const wrapperW = wrapper.clientWidth - 32;
+        if (bracketW > wrapperW && bracketW > 0) {
+            const scale = wrapperW / bracketW;
+            bracket.style.transformOrigin = 'top left';
+            bracket.style.transform = `scale(${scale})`;
+            wrapper.style.height = Math.ceil(bracketH * scale + 32) + 'px';
+        }
     },
 
     _bracketResizeCleanup: null,
@@ -1224,7 +1275,11 @@ const app = {
         let rafId = null;
         const redraw = () => {
             if (rafId) cancelAnimationFrame(rafId);
-            rafId = requestAnimationFrame(() => this.drawBracketSVG(containerId));
+            rafId = requestAnimationFrame(() => {
+                this._resetBracketScale();
+                this.drawBracketSVG(containerId);
+                this._scaleBracketToFit();
+            });
         };
 
         // Watch the scroll wrapper for size changes
@@ -1423,6 +1478,29 @@ const app = {
         }
     },
 
+    renderLeaderboardPage() {
+        const container = document.getElementById('gameContainer');
+        container.innerHTML = `
+            <div class="page-view">
+                <div class="lb-header">
+                    <div>
+                        <h1 class="page-title">LEADERBOARD</h1>
+                        <p class="lb-subtitle">67th All Japan Kendo Championship Bracket Challenge</p>
+                    </div>
+                    <div class="lb-tabs">
+                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'men' ? ' active' : ''}" onclick="app.switchLeaderboardGender('men')" id="lbMenTab">MEN'S AJKC</button>
+                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'women' ? ' active' : ''}" onclick="app.switchLeaderboardGender('women')" id="lbWomenTab">WOMEN'S AJKC</button>
+                    </div>
+                </div>
+                <div id="leaderboardContent"><p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading...</p></div>
+                <!-- Sponsor slot -->
+                <div class="sponsor-slot" id="sponsorLeaderboard"></div>
+                <div class="ad-slot" id="adLeaderboard"></div>
+            </div>`;
+        this.updateLeaderboard();
+        this._startLeaderboardListener();
+    },
+
     _renderLeaderboard() {
         const scores = this._lbScores;
         const uid = this.currentUser?.uid;
@@ -1474,6 +1552,7 @@ const app = {
             ? '<div style="text-align:center;margin-top:16px"><button class="bracket-action-btn" onclick="app._lbLoadMore()">LOAD MORE RANKINGS</button></div>'
             : '';
         container.innerHTML = `
+            <div class="ad-slot" id="adLeaderboardTop"></div>
             <div class="lb-podium">${podiumHtml}</div>
             ${youRowHtml}
             <div class="lb-table">
@@ -1516,16 +1595,16 @@ const app = {
     showLeaderboard() {
         this._closeNav();
         this._lbGender = this.currentGender;
-        document.getElementById('lbMenTab')?.classList.toggle('active', this.currentGender === 'men');
-        document.getElementById('lbWomenTab')?.classList.toggle('active', this.currentGender === 'women');
-        this.updateLeaderboard();
-        document.getElementById('leaderboardModal').style.display = 'block';
-        this._startLeaderboardListener();
+        this.currentView = 'leaderboard';
+        this._setActiveNav('navLeaderboard');
+        delete document.body.dataset.intensity;
+        this.render();
     },
 
     closeLeaderboard() {
-        document.getElementById('leaderboardModal').style.display = 'none';
-        this._stopLeaderboardListener();
+        this.currentView = 'bracket';
+        this._setActiveNav('navMyBracket');
+        this.render();
     },
 
     _lbUnsubscribe: null,
@@ -1565,9 +1644,29 @@ const app = {
 
     async viewAllBrackets() {
         this._closeNav();
+        this.currentView = 'allBrackets';
+        this._setActiveNav(null);
+        delete document.body.dataset.intensity;
+        this.render();
+    },
+
+    renderAllBracketsPage() {
+        const container = document.getElementById('gameContainer');
+        container.innerHTML = `
+            <div class="page-view">
+                <h1 class="page-title">ALL BRACKETS</h1>
+                <div style="max-width:600px;margin:0 auto 16px;position:relative;">
+                    <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:0.9em;pointer-events:none;">&#128269;</span>
+                    <input type="text" id="bracketSearch" class="submit-name-input" style="width:100%;padding-left:34px;" placeholder="Find bracket by name..." oninput="app.filterBrackets(this.value)" />
+                </div>
+                <div id="bracketsList" class="bracket-list" style="max-width:600px;margin:0 auto;"></div>
+                <div class="ad-slot" id="adAllBrackets"></div>
+            </div>`;
+        this._loadAllBrackets();
+    },
+
+    async _loadAllBrackets() {
         const bracketsList = document.getElementById('bracketsList');
-        const searchInput = document.getElementById('bracketSearch');
-        if (searchInput) searchInput.value = '';
         try {
             const snap = await db.collection('brackets-' + this.currentGender).get();
             if (snap.empty) {
@@ -1590,17 +1689,33 @@ const app = {
             bracketsList.innerHTML = '<p style="text-align:center;color:#f00;">Error loading brackets</p>';
             console.error('Error loading brackets:', e);
         }
-        document.getElementById('bracketsModal').style.display = 'block';
     },
 
+    _abPage: 0,
+    _abPageSize: 15,
+    _abFiltered: null,
+
     _renderBracketList(items) {
+        this._abFiltered = items;
+        this._abPage = 0;
+        this._renderBracketPage();
+    },
+
+    _renderBracketPage() {
+        const items = this._abFiltered || [];
         const bracketsList = document.getElementById('bracketsList');
         if (!items.length) {
             bracketsList.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No matches found</p>';
             return;
         }
         const isMe = (uid) => uid === this.currentUser?.uid;
-        bracketsList.innerHTML = items.map(item => `
+        const start = this._abPage * this._abPageSize;
+        const pageItems = items.slice(start, start + this._abPageSize);
+        const hasMore = start + this._abPageSize < items.length;
+        const total = items.length;
+
+        let html = `<p style="color:rgba(255,255,255,0.3);font-size:0.8em;margin-bottom:12px;">${total} bracket${total !== 1 ? 's' : ''}</p>`;
+        html += pageItems.map(item => `
             <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}')">
                 <div class="ab-info">
                     <div class="ab-name-wrap">
@@ -1617,6 +1732,47 @@ const app = {
                     <span class="ab-view">VIEW DETAILS →</span>
                 </div>
             </div>`).join('');
+
+        if (hasMore) {
+            html += '<div style="text-align:center;margin-top:16px;"><button class="bracket-action-btn" onclick="app._abLoadMore()">LOAD MORE</button></div>';
+        }
+        bracketsList.innerHTML = html;
+    },
+
+    _abLoadMore() {
+        this._abPage++;
+        const items = this._abFiltered || [];
+        const isMe = (uid) => uid === this.currentUser?.uid;
+        const start = this._abPage * this._abPageSize;
+        const pageItems = items.slice(start, start + this._abPageSize);
+        const hasMore = start + this._abPageSize < items.length;
+
+        const rows = pageItems.map(item => `
+            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}')">
+                <div class="ab-info">
+                    <div class="ab-name-wrap">
+                        ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
+                        <span class="ab-name">${UI.escapeHtml(item.name)}</span>
+                    </div>
+                    ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
+                </div>
+                <div class="ab-meta">
+                    <div class="ab-date-wrap">
+                        <span class="ab-date-label">SUBMITTED</span>
+                        <span class="ab-date">${UI.escapeHtml(item.dateStr)}</span>
+                    </div>
+                    <span class="ab-view">VIEW DETAILS →</span>
+                </div>
+            </div>`).join('');
+
+        // Remove load more button and append new rows
+        const btn = document.querySelector('#bracketsList .bracket-action-btn');
+        if (btn) btn.parentElement.remove();
+        document.getElementById('bracketsList').insertAdjacentHTML('beforeend', rows);
+        if (hasMore) {
+            document.getElementById('bracketsList').insertAdjacentHTML('beforeend',
+                '<div style="text-align:center;margin-top:16px;"><button class="bracket-action-btn" onclick="app._abLoadMore()">LOAD MORE</button></div>');
+        }
     },
 
     filterBrackets(query) {
@@ -1636,11 +1792,11 @@ const app = {
                 this.bracket = data.predictions || {};
                 this._viewingBracketName = data.displayName || 'Anonymous';
                 this.viewingOtherBracket = (uid !== this.currentUser?.uid);
+                this.currentView = 'bracket';
                 this.gameState = 'bracket-summary';
                 UI.showBackToMine(this.viewingOtherBracket);
                 await this.loadActualResults();
                 this.render();
-                this.closeModal();
             } else {
                 showToast('Bracket not found.', 'error');
             }
@@ -1652,6 +1808,7 @@ const app = {
 
     viewMyBracket() {
         this._closeNav();
+        this.currentView = 'bracket';
         this.viewingOtherBracket = false;
         UI.showBackToMine(false);
         this._setActiveNav('navMyBracket');
@@ -1696,15 +1853,128 @@ const app = {
         }
     },
 
+    // ── Legal Pages ─────────────────────────────────────────────
+
+    _legalTab: 'privacy',
+
+    showLegal(tab) {
+        this._legalTab = tab || 'privacy';
+        this.currentView = 'legal';
+        this._setActiveNav(null);
+        delete document.body.dataset.intensity;
+        // Show mainApp if coming from landing
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.render();
+    },
+
+    switchLegalTab(tab) {
+        this._legalTab = tab;
+        this.renderLegalPage();
+    },
+
+    renderLegalPage() {
+        const container = document.getElementById('gameContainer');
+        const isPrivacy = this._legalTab === 'privacy';
+
+        const privacySections = [
+            { title: '1. Information We Collect', body: `<div class="legal-subsection"><p class="legal-sub-title">Account Information</p><p>Email address, username, and optional location if you choose to provide it.</p></div><div class="legal-subsection"><p class="legal-sub-title">Authentication Data</p><p>Login information through email/password or third-party sign-in providers such as Google.</p></div><div class="legal-subsection"><p class="legal-sub-title">Usage Data</p><p>Session information, bracket activity, and basic device or browser information collected automatically.</p></div>` },
+            { title: '2. How We Use Your Information', body: 'We use your information to create and manage your account, display usernames on leaderboards or public features, operate and improve the platform, monitor performance, and communicate important updates.' },
+            { title: '3. Cookies and Tracking', body: 'We may use cookies or similar technologies to keep you logged in and improve the user experience. By using the site, you consent to this use.' },
+            { title: '4. Third-Party Services', body: 'We may use third-party services for authentication, analytics, hosting, and sponsor advertising. These services may collect limited information under their own privacy policies.' },
+            { title: '5. Advertising and Sponsors', body: 'ajkcmadness may display sponsor banners and advertising placements. We do not sell your personal information.' },
+            { title: '6. Data Sharing', body: 'We may share limited information with service providers that help operate the platform, or when required by law. We do not sell personal data.' },
+            { title: '7. Data Security', body: 'We take reasonable steps to protect your information, but no method of transmission or storage is completely secure.' },
+            { title: '8. International Users', body: 'ajkcmadness is accessible worldwide. By using the platform, you understand that your information may be processed in the United States.' },
+            { title: '9. Children\&#39;s Privacy', body: 'This platform is not intended for children under 13, and we do not knowingly collect personal information from children.' },
+            { title: '10. Your Rights', body: 'You may request account deletion or ask for access to your information by contacting jayeunnie@gmail.com.' },
+            { title: '11. Changes to This Policy', body: 'We may update this Privacy Policy from time to time. Continued use of the site means you accept the updated version.' }
+        ];
+
+        const termsSections = [
+            { title: '1. Use of the Platform', body: 'ajkcmadness provides a free, for-fun bracket prediction game related to kendo competitions. No purchase is required, and no prizes or monetary rewards are currently offered.' },
+            { title: '2. Accounts', body: 'To use certain features, you must create an account. You agree to provide accurate information, keep your login secure, and remain responsible for activity on your account. We may suspend or terminate accounts at our discretion.' },
+            { title: '3. Usernames and Public Display', body: 'Usernames may appear publicly, including on leaderboards. Please do not use offensive, misleading, or inappropriate usernames. We reserve the right to change or remove usernames.' },
+            { title: '4. Acceptable Use', body: 'You agree not to hack, disrupt, abuse, scrape, bot, or otherwise interfere with the platform or other users\' experience.' },
+            { title: '5. Intellectual Property', body: 'All branding, site design, original content, and platform features of ajkcmadness are owned by us unless otherwise stated. You may not copy or distribute them without permission.' },
+            { title: '6. Advertising', body: 'The platform may include sponsor banners or other advertising placements. We are not responsible for third-party products, services, or claims.' },
+            { title: '7. Disclaimer', body: 'This platform is provided for entertainment purposes only. We do not guarantee prediction accuracy, uninterrupted availability, or error-free operation.' },
+            { title: '8. Limitation of Liability', body: 'To the fullest extent permitted by law, ajkcmadness is not liable for damages, losses, data issues, or interruptions arising from your use of the platform.' },
+            { title: '9. Termination', body: 'We may suspend or terminate access to the platform at any time, with or without notice, for any reason.' },
+            { title: '10. Changes to Terms', body: 'We may update these Terms of Service from time to time. Continued use of the platform means you accept the revised terms.' },
+            { title: '11. Contact', body: 'Questions about these Terms may be sent to jayeunnie@gmail.com.' }
+        ];
+
+        const sections = isPrivacy ? privacySections : termsSections;
+        const sectionsHtml = sections.map(s =>
+            `<div class="legal-card"><h3 class="legal-card-title">${s.title}</h3><div class="legal-card-body">${s.body}</div></div>`
+        ).join('');
+
+        container.innerHTML = `
+            <div class="page-view legal-page">
+                <div class="legal-header">
+                    <p class="legal-label">AJKCMADNESS</p>
+                    <h1 class="legal-main-title">Privacy Policy & Terms of Service</h1>
+                    <p class="legal-intro">Clear information about how ajkcmadness handles accounts, public usernames, login tracking, sponsor placements, and your use of the platform.</p>
+                </div>
+
+                <div class="legal-meta">
+                    <div class="legal-meta-item"><span class="legal-meta-label">Last Updated</span><span class="legal-meta-value">March 20, 2026</span></div>
+                    <div class="legal-meta-item"><span class="legal-meta-label">Contact</span><span class="legal-meta-value">jayeunnie@gmail.com</span></div>
+                    <div class="legal-meta-item"><span class="legal-meta-label">Platform Type</span><span class="legal-meta-value">Free kendo bracket game</span></div>
+                </div>
+
+                <div class="legal-tabs">
+                    <button class="legal-tab${isPrivacy ? ' active' : ''}" onclick="app.switchLegalTab('privacy')">PRIVACY POLICY</button>
+                    <button class="legal-tab${!isPrivacy ? ' active' : ''}" onclick="app.switchLegalTab('terms')">TERMS OF SERVICE</button>
+                </div>
+
+                <div class="legal-preamble">
+                    ${isPrivacy
+                        ? 'ajkcmadness operates an online bracket-style game platform related to kendo competitions. This Privacy Policy explains what information we collect, how we use it, and how we work to protect it.'
+                        : 'By using ajkcmadness, you agree to these Terms of Service. They explain the rules for using the platform, public usernames, sponsor advertising, and limitations of liability.'}
+                </div>
+
+                <div class="legal-sections">${sectionsHtml}</div>
+
+                <div class="legal-notes">
+                    <h2 class="legal-notes-title">Quick Notes</h2>
+                    <div class="legal-notes-grid">
+                        <div class="legal-note"><p class="legal-note-title">Public usernames</p><p>Usernames may appear on leaderboards or similar features, so avoid using personal information you do not want shown publicly.</p></div>
+                        <div class="legal-note"><p class="legal-note-title">No prizes right now</p><p>The current version is free to play and does not offer prizes or monetary rewards.</p></div>
+                        <div class="legal-note"><p class="legal-note-title">Sponsor placements</p><p>The site may include direct sponsor banners or branded placements, but ajkcmadness is not responsible for third-party products or services.</p></div>
+                    </div>
+                </div>
+            </div>`;
+        window.scrollTo(0, 0);
+    },
+
     // ── Stats Dashboard ────────────────────────────────────────
 
     _statsCharts: [],
 
     async showStats() {
         this._closeNav();
+        this.currentView = 'stats';
+        this._setActiveNav(null);
+        delete document.body.dataset.intensity;
+        this.render();
+    },
+
+    renderStatsPage() {
+        const container = document.getElementById('gameContainer');
+        container.innerHTML = `
+            <div class="page-view">
+                <div class="ad-slot" id="adStatsTop"></div>
+                <h1 class="page-title">TOURNAMENT STATS</h1>
+                <div id="statsContent"><p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading stats...</p></div>
+                <div class="ad-slot" id="adStats"></div>
+            </div>`;
+        this._loadStats();
+    },
+
+    async _loadStats() {
         const content = document.getElementById('statsContent');
-        content.innerHTML = '<p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading stats...</p>';
-        document.getElementById('statsModal').style.display = 'block';
 
         try {
             const [menSnap, womenSnap] = await Promise.all([
@@ -2298,15 +2568,6 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 window.addEventListener('click', event => {
-    if (event.target === document.getElementById('bracketsModal')) {
-        app.closeModal();
-    }
-    if (event.target === document.getElementById('statsModal')) {
-        app.closeStatsModal();
-    }
-    if (event.target === document.getElementById('leaderboardModal')) {
-        app.closeLeaderboard();
-    }
     if (event.target === document.getElementById('signInModal')) {
         app.closeSignInModal();
     }

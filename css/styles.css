@@ -175,6 +175,19 @@ body.women {
     font-size: 1.1em;
 }
 
+.presented-by {
+    font-family: 'Lexend', sans-serif;
+    font-size: 0.85em;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+}
+.presented-sponsor {
+    color: var(--kendo-gold);
+    font-weight: 600;
+}
+
 .landing-countdown {
     margin-bottom: 40px;
 }
@@ -847,11 +860,53 @@ button.danger:hover {
     color: white;
 }
 
+.lb-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+.lb-header .page-title {
+    margin: 0 0 4px 0;
+    text-align: left;
+}
+
+.lb-subtitle {
+    color: rgba(255,255,255,0.3);
+    font-size: 0.85em;
+    margin: 0;
+    text-align: left;
+}
+
 .lb-tabs {
     display: flex;
     gap: 0;
-    margin-bottom: 24px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Sponsor slot */
+.sponsor-slot {
+    max-width: 600px;
+    margin: 24px auto;
+    text-align: center;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.sponsor-slot:empty {
+    min-height: 70px;
+    border: 1px dashed rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.1);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.7em;
+    letter-spacing: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sponsor-slot:empty::after {
+    content: 'SPONSOR';
 }
 
 .lb-tab {
@@ -1218,8 +1273,6 @@ button.danger:hover {
 }
 
 .bracket-list {
-    max-height: 450px;
-    overflow-y: auto;
     padding: 0 4px;
 }
 
@@ -2161,6 +2214,14 @@ body.women .player-card.picked {
     font-weight: 600;
 }
 
+.crowd-pcts-inline {
+    text-align: center;
+    font-size: 0.85em;
+    color: rgba(255,255,255,0.4);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
 /* ── Stats pills ── */
 .bracket-stats-row {
     display: flex;
@@ -3083,6 +3144,186 @@ select.submit-name-input option {
     padding: 4px 8px;
 }
 
+/* ── Page views (full-page leaderboard, stats, all brackets) ── */
+.page-view {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px 24px 40px;
+}
+
+.page-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5em;
+    color: white;
+    letter-spacing: 3px;
+    margin-bottom: 20px;
+}
+
+/* ── Legal Pages ── */
+.legal-page { max-width: 800px; }
+
+.legal-header {
+    background: linear-gradient(135deg, var(--surface-2), var(--surface-3));
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+}
+.legal-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.85em;
+    letter-spacing: 3px;
+    color: var(--kendo-gold);
+    margin-bottom: 8px;
+}
+.legal-main-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2em;
+    color: white;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+}
+.legal-intro {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.85em;
+    line-height: 1.6;
+    max-width: 600px;
+}
+
+.legal-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.legal-meta-item {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.legal-meta-label {
+    display: block;
+    font-size: 0.65em;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.35);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+.legal-meta-value {
+    display: block;
+    color: white;
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.legal-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 24px;
+}
+.legal-tab {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1em;
+    letter-spacing: 2px;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+.legal-tab:hover { color: rgba(255,255,255,0.7); }
+.legal-tab.active {
+    color: var(--kendo-gold);
+    border-bottom-color: var(--kendo-gold);
+}
+
+.legal-preamble {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    color: rgba(255,255,255,0.6);
+    font-size: 0.85em;
+    line-height: 1.7;
+}
+
+.legal-sections { display: flex; flex-direction: column; gap: 12px; }
+
+.legal-card {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px 24px;
+}
+.legal-card-title {
+    font-family: 'Lexend', sans-serif;
+    font-size: 0.9em;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 10px;
+}
+.legal-card-body {
+    color: rgba(255,255,255,0.55);
+    font-size: 0.82em;
+    line-height: 1.7;
+}
+.legal-subsection { margin-bottom: 10px; }
+.legal-subsection:last-child { margin-bottom: 0; }
+.legal-sub-title {
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    margin-bottom: 2px;
+}
+
+.legal-notes {
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    padding: 28px;
+    margin-top: 28px;
+}
+.legal-notes-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3em;
+    color: white;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+}
+.legal-notes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+.legal-note {
+    background: var(--surface-3);
+    border-radius: 12px;
+    padding: 18px;
+}
+.legal-note-title {
+    font-weight: 600;
+    font-size: 0.85em;
+    color: white;
+    margin-bottom: 8px;
+}
+.legal-note p:last-child {
+    color: rgba(255,255,255,0.5);
+    font-size: 0.8em;
+    line-height: 1.6;
+}
+
+@media (max-width: 700px) {
+    .legal-meta { grid-template-columns: 1fr; }
+    .legal-notes-grid { grid-template-columns: 1fr; }
+    .legal-main-title { font-size: 1.5em; }
+    .legal-header { padding: 20px; }
+}
+
 /* ── Donate ── */
 .landing-nav-donate {
     color: var(--kendo-gold) !important;
@@ -3191,6 +3432,13 @@ select.submit-name-input option {
     text-decoration: none;
     font-size: 0.8em;
     transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.footer-col a svg {
+    flex-shrink: 0;
 }
 
 .footer-col a:hover {
@@ -3243,28 +3491,17 @@ select.submit-name-input option {
     content: 'AD SPACE';
 }
 
-.bracket-content-with-sidebar {
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-}
-
-.bracket-main-col {
-    flex: 1;
-    min-width: 0;
-}
-
 .ad-sidebar {
-    flex: 0 0 160px;
+    position: fixed;
+    right: 20px;
+    top: 60px;
+    width: 160px;
     min-height: 600px;
     max-width: 160px;
-    position: sticky;
-    top: 60px;
 }
 
-@media (max-width: 1200px) {
-    .ad-sidebar { display: none; }
-    .bracket-content-with-sidebar { display: block; }
+@media (max-width: 1400px) {
+    .ad-sidebar { display: none !important; }
 }
 
 /* ── Toast notifications ── */
@@ -3358,6 +3595,8 @@ select.submit-name-input option {
     .lb-row-pts { font-size: 1em; }
     .lb-row-you { padding-left: 8px; }
     .lb-tabs { gap: 0; }
+    .lb-header { flex-direction: column; gap: 12px; }
+    .lb-subtitle { font-size: 0.75em; }
     .lb-tab { padding: 8px 12px; font-size: 0.75em; }
 
     /* Stats */
