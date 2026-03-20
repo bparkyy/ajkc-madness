@@ -3088,6 +3088,10 @@ select.submit-name-input option {
     color: var(--kendo-gold) !important;
 }
 
+.nav-donate {
+    color: var(--kendo-gold) !important;
+}
+
 .donate-options {
     display: flex;
     flex-direction: column;
