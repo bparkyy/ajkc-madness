@@ -3,570 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>All Japan Kendo Championship Bracket</title>
-    
-    <!-- Firebase SDK -->
+    <title>AJKC Madness — All Japan Kendo Championship Bracket</title>
+
+    <!-- Firebase SDK (compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
-    <!-- Chart.js for visualizations -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <style>
-        :root {
-            /* Men's color scheme (blue/purple) */
-            --men-primary: #667eea;
-            --men-secondary: #764ba2;
-            --men-accent: #5568d3;
-            
-            /* Women's color scheme (pink/rose) */
-            --women-primary: #ec4899;
-            --women-secondary: #be185d;
-            --women-accent: #db2777;
-        }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Lexend:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, var(--men-primary) 0%, var(--men-secondary) 100%);
-            padding: 20px;
-            min-height: 100vh;
-            transition: background 0.5s ease;
-        }
-
-        body.women {
-            background: linear-gradient(135deg, var(--women-primary) 0%, var(--women-secondary) 100%);
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-
-        h1 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2em;
-        }
-
-        .controls {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .user-input {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        input[type="text"] {
-            padding: 10px 15px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            width: 200px;
-        }
-
-        button {
-            padding: 10px 20px;
-            background: var(--men-primary);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background 0.3s;
-        }
-
-        button:hover {
-            background: var(--men-accent);
-        }
-
-        body.women button:not(.gender-toggle button) {
-            background: var(--women-primary);
-        }
-
-        body.women button:not(.gender-toggle button):hover {
-            background: var(--women-accent);
-        }
-
-        button.secondary {
-            background: #48bb78;
-        }
-
-        button.secondary:hover {
-            background: #38a169;
-        }
-
-        button.danger {
-            background: #f56565;
-        }
-
-        button.danger:hover {
-            background: #e53e3e;
-        }
-
-        .gender-toggle {
-            display: flex;
-            background: #f7fafc;
-            border-radius: 8px;
-            padding: 4px;
-            gap: 4px;
-        }
-
-        .gender-toggle button {
-            background: transparent;
-            color: #666;
-            padding: 8px 16px;
-            font-size: 13px;
-        }
-
-        .gender-toggle button.active {
-            background: var(--men-primary);
-            color: white;
-        }
-
-        body.women .gender-toggle button:not(.active) {
-            background: transparent;
-            color: #666;
-        }
-
-        body.women .gender-toggle button.active {
-            background: var(--women-primary);
-            color: white;
-        }
-
-        .gender-toggle button:hover:not(.active) {
-            background: #e2e8f0;
-        }
-
-        .gender-toggle button.active:hover {
-            background: var(--men-accent);
-        }
-
-        body.women .gender-toggle button.active:hover {
-            background: var(--women-accent);
-        }
-
-        .bracket-container {
-            overflow-x: auto;
-            margin-top: 30px;
-        }
-
-        .bracket {
-            display: flex;
-            gap: 60px;
-            min-width: 1200px;
-            padding: 20px;
-        }
-
-        .round {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-around;
-            position: relative;
-        }
-
-        .round-0 .matchup {
-            margin: 5px 0;
-        }
-
-        .round-1 .matchup {
-            margin: 20px 0;
-        }
-
-        .round-2 .matchup {
-            margin: 60px 0;
-        }
-
-        .round-3 .matchup {
-            margin: 140px 0;
-        }
-
-        .round-4 .matchup {
-            margin: 300px 0;
-        }
-
-        .round-5 .matchup {
-            margin: 620px 0;
-        }
-
-        .round-title {
-            text-align: center;
-            font-weight: bold;
-            color: var(--men-primary);
-            margin-bottom: 20px;
-            font-size: 1.1em;
-        }
-
-        body.women .round-title {
-            color: var(--women-primary);
-        }
-
-        .matchup {
-            background: #f7fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            margin: 10px 0;
-            padding: 8px;
-            position: relative;
-        }
-
-        /* Horizontal line extending from matchup to the right */
-        .matchup::after {
-            content: '';
-            position: absolute;
-            left: 100%;
-            top: 50%;
-            width: 20px;
-            height: 2px;
-            background: #cbd5e0;
-        }
-
-        /* Hide line for final round */
-        .round:last-child .matchup::after {
-            display: none;
-        }
-
-        /* Vertical connector between pairs of matches */
-        .matchup.has-connector::before {
-            content: '';
-            position: absolute;
-            left: calc(100% + 20px);
-            top: 50%;
-            width: 2px;
-            background: #cbd5e0;
-        }
-
-        /* Top match of pair - line goes down */
-        .matchup.connector-down::before {
-            height: calc(100% + 10px + 50%);
-        }
-
-        /* Bottom match of pair - line goes up */
-        .matchup.connector-up::before {
-            height: calc(100% + 10px + 50%);
-            bottom: 50%;
-            top: auto;
-        }
-
-        .player {
-            padding: 12px;
-            cursor: pointer;
-            border-radius: 4px;
-            transition: all 0.2s;
-            margin: 2px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .player:hover {
-            background: #edf2f7;
-        }
-
-        .player.selected {
-            background: var(--men-primary);
-            color: white;
-            font-weight: 600;
-        }
-
-        body.women .player.selected {
-            background: var(--women-primary);
-        }
-
-        .player.correct {
-            background: #48bb78;
-            color: white;
-        }
-
-        .player.incorrect {
-            background: #f56565;
-            color: white;
-        }
-
-        .player-name {
-            flex: 1;
-            font-weight: 600;
-        }
-
-        .prefecture {
-            font-size: 0.8em;
-            opacity: 0.7;
-            margin-left: 8px;
-        }
-
-        .rank {
-            font-size: 0.85em;
-            opacity: 0.7;
-            margin-right: 8px;
-            font-weight: bold;
-        }
-
-        .leaderboard {
-            margin-top: 40px;
-            padding: 20px;
-            background: #f7fafc;
-            border-radius: 8px;
-        }
-
-        .leaderboard h2 {
-            color: #333;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .leaderboard-entry {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px;
-            background: white;
-            margin: 8px 0;
-            border-radius: 6px;
-            border-left: 4px solid var(--men-primary);
-        }
-
-        body.women .leaderboard-entry {
-            border-left-color: var(--women-primary);
-        }
-
-        .leaderboard-entry.top {
-            border-left-color: #f6ad55;
-            font-weight: 600;
-        }
-
-        .leaderboard .rank {
-            font-weight: bold;
-            color: var(--men-primary);
-            min-width: 40px;
-        }
-
-        body.women .leaderboard .rank {
-            color: var(--women-primary);
-        }
-
-        .instructions {
-            background: #edf2f7;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 0.95em;
-            color: #555;
-        }
-
-        .mode-indicator {
-            text-align: center;
-            padding: 10px;
-            background: #edf2f7;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            font-weight: 600;
-            color: var(--men-primary);
-        }
-
-        body.women .mode-indicator {
-            color: var(--women-primary);
-        }
-
-        #bracketCount {
-            padding: 10px 20px;
-            background: #edf2f7;
-            border-radius: 6px;
-            font-weight: 600;
-            color: var(--men-primary);
-        }
-
-        body.women #bracketCount {
-            color: var(--women-primary);
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            overflow-y: auto;
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 50px auto;
-            padding: 30px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 800px;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .close {
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            color: #999;
-        }
-
-        .close:hover {
-            color: #333;
-        }
-
-        .bracket-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .bracket-item {
-            padding: 15px;
-            background: #f7fafc;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .bracket-item:hover {
-            background: #edf2f7;
-            transform: translateX(5px);
-        }
-
-        .bracket-info {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .bracket-name {
-            font-weight: 600;
-            font-size: 1.1em;
-        }
-
-        .bracket-date {
-            font-size: 0.85em;
-            color: #666;
-        }
-
-        .locked-notice {
-            background: #fef5e7;
-            border: 2px solid #f39c12;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-            font-weight: 600;
-            color: #d68910;
-        }
-
-        .chart-section {
-            background: #f7fafc;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 30px;
-        }
-
-        .chart-section h2 {
-            color: #333;
-            margin-bottom: 15px;
-            text-align: center;
-        }
-
-        .chart-container {
-            position: relative;
-            height: 400px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .chart-description {
-            text-align: center;
-            color: #666;
-            margin-bottom: 20px;
-            font-size: 0.95em;
-        }
-    </style>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1 id="bracketTitle">All Japan Kendo Championship - Men's Bracket</h1>
-        
-        <div style="display: flex; justify-content: center; margin: 20px 0;">
-            <div class="gender-toggle">
-                <button id="menBtn" class="active" onclick="app.switchGender('men')">👨 Men's Bracket</button>
-                <button id="womenBtn" onclick="app.switchGender('women')">👩 Women's Bracket</button>
+    <!-- ══════ Landing Page ══════ -->
+    <div id="landingPage" class="landing">
+        <div class="landing-bg"></div>
+
+        <!-- Landing nav bar -->
+        <nav class="landing-nav">
+            <span class="landing-nav-logo">AJKC MADNESS</span>
+            <div class="landing-nav-links">
+                <a href="#howToPlay">HOW TO PLAY</a>
+                <a href="#scoring">SCORING</a>
+            </div>
+        </nav>
+
+        <div class="landing-content">
+            <!-- Hero section -->
+            <section class="landing-hero">
+                <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMEN'S KENDO CHAMPIONSHIP</div>
+                <h1 class="landing-title">AJKC<br><span class="landing-accent">MADNESS</span></h1>
+
+                <div class="landing-countdown" id="countdown">
+                    <div class="countdown-label">Tournament begins in</div>
+                    <div class="countdown-timer">
+                        <div class="countdown-unit"><span id="cdDays">--</span><small>Days</small></div>
+                        <div class="countdown-sep">:</div>
+                        <div class="countdown-unit"><span id="cdHours">--</span><small>Hours</small></div>
+                        <div class="countdown-sep">:</div>
+                        <div class="countdown-unit"><span id="cdMins">--</span><small>Min</small></div>
+                        <div class="countdown-sep">:</div>
+                        <div class="countdown-unit"><span id="cdSecs">--</span><small>Sec</small></div>
+                    </div>
+                </div>
+
+                <div class="landing-buttons">
+                    <button class="landing-btn men" onclick="app.enterBracket('men')">MEN'S BRACKET</button>
+                    <button class="landing-btn women" onclick="app.enterBracket('women')">WOMEN'S BRACKET</button>
+                </div>
+
+                <div class="landing-stats" id="landingStats"></div>
+            </section>
+
+            <!-- How to Play -->
+            <section class="landing-section" id="howToPlay">
+                <h2 class="section-title">HOW TO PLAY</h2>
+                <div class="htp-cards">
+                    <div class="htp-card">
+                        <span class="htp-num">01</span>
+                        <h3>PICK WINNERS</h3>
+                        <p>Select the winner for every match from the Round of 64 to the Finals.</p>
+                    </div>
+                    <div class="htp-card">
+                        <span class="htp-num">02</span>
+                        <h3>EARN POINTS</h3>
+                        <p>Get points for every correct pick and successful advancement.</p>
+                    </div>
+                    <div class="htp-card">
+                        <span class="htp-num">03</span>
+                        <h3>ESCALATING STAKES</h3>
+                        <p>Later rounds carry more weight. Precision becomes critical as the field narrows.</p>
+                    </div>
+                    <div class="htp-card htp-card-highlight">
+                        <span class="htp-num">04</span>
+                        <h3>WIN PRESTIGE</h3>
+                        <p>The top scorer at the end of the championship is crowned Bracket Champion.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Scoring -->
+            <section class="landing-section" id="scoring">
+                <h2 class="section-title">SCORING BREAKDOWN</h2>
+                <div class="scoring-table-v2">
+                    <div class="scoring-header">
+                        <span>TOURNAMENT PHASE</span>
+                        <span>POINTS PER CORRECT PICK</span>
+                    </div>
+                    <div class="scoring-row-v2"><span>Round of 64</span><span><strong>1</strong> PT</span></div>
+                    <div class="scoring-row-v2"><span>Round of 32</span><span><strong>2</strong> PTS</span></div>
+                    <div class="scoring-row-v2"><span>Round of 16</span><span><strong>4</strong> PTS</span></div>
+                    <div class="scoring-row-v2"><span>Quarterfinals</span><span><strong>8</strong> PTS</span></div>
+                    <div class="scoring-row-v2"><span>Semifinals</span><span><strong>16</strong> PTS</span></div>
+                    <div class="scoring-row-v2 scoring-highlight"><span>Finals</span><span><strong>32</strong> PTS</span></div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- ══════ Main App (hidden initially) ══════ -->
+    <div id="mainApp" style="display: none;">
+        <!-- Header bar -->
+        <div class="app-header">
+            <div class="app-header-left">
+                <span class="app-title" onclick="app.goHome()" style="cursor:pointer;">AJKC MADNESS</span>
+            </div>
+            <nav class="app-nav">
+                <button class="nav-link active" onclick="void(0)">MY BRACKET</button>
+                <button class="nav-link" onclick="app.showLeaderboard()">LEADERBOARD</button>
+                <button class="nav-link" onclick="app.showStats()">STATS</button>
+                <button class="nav-link" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
+            </nav>
+            <div class="app-header-right">
+                <button id="backToMineBtn" class="back-to-mine-btn" style="display: none;" onclick="app.viewMyBracket()">↩</button>
+                <button id="adminBtn" class="nav-icon-btn" onclick="app.toggleAdminMode()" title="Admin">⚙️</button>
             </div>
         </div>
 
-        <div class="instructions">
-            <strong>How to play:</strong> Enter your name, click through the bracket to make your predictions, then save your bracket. When the actual results are in, the leaderboard will show who had the closest bracket! Bracket will lock once tournament begins.
-        </div>
+        <input type="hidden" id="userName" />
+        <input type="hidden" id="userLocation" />
+        <input type="hidden" id="userTechnique" />
+        <input type="hidden" id="userFinalScore" />
+        <span id="bracketCount" style="display:none;"></span>
 
         <div id="lockedNotice" class="locked-notice" style="display: none;">
             🔒 Tournament has started! Bracket submissions are now locked.
         </div>
 
-        <div class="controls">
-            <div class="user-input">
-                <input type="text" id="userName" placeholder="Enter your name" />
-                <button onclick="app.saveBracket()">💾 Save My Bracket</button>
-            </div>
-            <button onclick="app.viewAllBrackets()">👥 View All Brackets</button>
-            <button onclick="app.toggleAdminMode()">⚙️ Admin Mode</button>
-            <button class="secondary" onclick="app.toggleLeaderboard()" id="leaderboardBtn">🏆 View Leaderboard</button>
-            <div id="bracketCount" style="padding: 10px 20px; background: #edf2f7; border-radius: 6px; font-weight: 600;">
-                📊 Loading...
-            </div>
-        </div>
-
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
             <span id="modeText"></span>
-            <button class="danger" onclick="app.clearAll()" style="margin-left: 20px;">🗑️ Clear All Data</button>
-            <button onclick="app.toggleLock()" style="margin-left: 10px;" id="lockBtn">🔒 Lock Submissions</button>
+            <button onclick="app.saveAdminResults()" style="margin-left: 10px;">Save Results</button>
+            <button class="danger" onclick="app.clearAll()" style="margin-left: 10px;">Clear All Data</button>
+            <button onclick="app.toggleLock()" style="margin-left: 10px;" id="lockBtn">Lock Submissions</button>
+            <span style="margin-left:16px;">Final Technique:</span>
+            <select id="adminTechnique" style="margin-left:4px;padding:4px 8px;background:var(--surface-2);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
+                <option value="">Not set</option>
+                <option value="men">Men</option>
+                <option value="kote">Kote</option>
+                <option value="do">Do</option>
+                <option value="tsuki">Tsuki</option>
+                <option value="hansoku">Hansoku</option>
+            </select>
+            <button onclick="app.saveActualTechnique()" style="margin-left:4px;">Save Final</button>
         </div>
 
-        <div class="bracket-container">
+        <!-- Full-screen game area -->
+        <div id="gameContainer" class="game-container"></div>
+
+        <div class="bracket-container" id="bracketContainer" style="display: none;">
             <div class="bracket" id="bracket"></div>
         </div>
 
-        <div class="chart-section" id="championChart" style="display: none;">
-            <h2>📊 Predicted Champion</h2>
-            <p class="chart-description">See who everyone thinks will win the All Japan Kendo Championship!</p>
-            <div class="chart-container">
-                <canvas id="pieChart"></canvas>
-            </div>
-        </div>
+        <div class="leaderboard" id="leaderboard" style="display: none;"></div>
+    </div>
 
-        <div class="leaderboard" id="leaderboard" style="display: none;">
-            <h2>🏆 Leaderboard</h2>
+    <!-- Leaderboard modal -->
+    <div id="leaderboardModal" class="modal">
+        <div class="modal-content lb-modal">
+            <div class="modal-header">
+                <div>
+                    <h2 class="lb-title">LEADERBOARD</h2>
+                </div>
+                <span class="close" onclick="app.closeLeaderboard()">&times;</span>
+            </div>
+            <div class="lb-tabs">
+                <button class="lb-tab active" onclick="app.switchLeaderboardGender('men')" id="lbMenTab">MEN'S AJKC</button>
+                <button class="lb-tab" onclick="app.switchLeaderboardGender('women')" id="lbWomenTab">WOMEN'S AJKC</button>
+            </div>
             <div id="leaderboardContent"></div>
         </div>
     </div>
@@ -582,804 +192,20 @@
         </div>
     </div>
 
-    <script>
-        // Initialize Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBYTFoMl-7yV6knvbHikVHRN8dlbyIil6A",
-            authDomain: "kendo-bracket.firebaseapp.com",
-            projectId: "kendo-bracket",
-            storageBucket: "kendo-bracket.firebasestorage.app",
-            messagingSenderId: "837468107917",
-            appId: "1:837468107917:web:163051cf69519877cbdec4"
-        };
-        
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+    <!-- Stats modal -->
+    <div id="statsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 Tournament Stats</h2>
+                <span class="close" onclick="app.closeStatsModal()">&times;</span>
+            </div>
+            <div id="statsContent"></div>
+        </div>
+    </div>
 
-        const app = {
-            players: [],
-            menPlayers: [],
-            womenPlayers: [],
-            bracket: {},
-            adminMode: false,
-            currentUser: '',
-            actualResults: null,
-            isLocked: false,
-            championChart: null,
-            currentGender: 'men',
-            
-            async init() {
-                this.generatePlayers();
-                this.players = this.menPlayers; // Start with men's bracket
-                await this.checkLockStatus();
-                await this.loadActualResults();
-                this.renderBracket();
-                this.updateLeaderboard();
-                await this.updateBracketCount();
-                this.updateChampionChart();
-            },
-
-            generatePlayers() {
-                const menPlayersData = [
-                    // Left side of bracket (32 players)
-                    { name: 'Y.KUROKAWA', prefecture: 'Kanagawa', rank: 5 },
-                    { name: 'T.CHIKAMOTO', prefecture: 'Aichi', rank: 5 },
-                    { name: 'Y.YAMADA', prefecture: 'Nara', rank: 'R6' },
-                    { name: 'Y.OKUMURA', prefecture: 'Hokkaido', rank: 5 },
-                    { name: 'H.SOMEYA', prefecture: 'Chiba', rank: 5 },
-                    { name: 'M.HATSUKANO', prefecture: 'Tottori', rank: 4 },
-                    { name: 'K.SHIMOKUBO', prefecture: 'Miyazaki', rank: 'R6' },
-                    { name: 'T.MORIMOTO', prefecture: 'Kagawa', rank: 'R6' },
-                    { name: 'K.SENDA', prefecture: 'Miyagi', rank: 5 },
-                    { name: 'R.KUNITOMO', prefecture: 'Fukuoka', rank: 'R6' },
-                    { name: 'Y.NAKANE', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'S.NISHIZAWA', prefecture: 'Nagano', rank: 5 },
-                    { name: 'Y.TAKENOUCHI', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'S.MAEDA', prefecture: 'Hyogo', rank: 6 },
-                    { name: 'Y.MATSUOKA', prefecture: 'Mie', rank: 5 },
-                    { name: 'R.KAMOI', prefecture: 'Okayama', rank: 5 },
-                    { name: 'T.UEZU', prefecture: 'Okinawa', rank: 'R7' },
-                    { name: 'K.TAKEMOTO', prefecture: 'Shiga', rank: 4 },
-                    { name: 'R.NATSUMEDA', prefecture: 'Hiroshima', rank: 4 },
-                    { name: 'H.HOSHINO', prefecture: 'Gunma', rank: 5 },
-                    { name: 'T.YAMAZAKI', prefecture: 'Ishikawa', rank: 5 },
-                    { name: 'N.TASHIRO', prefecture: 'Fukuoka', rank: 4 },
-                    { name: 'Y.ITO', prefecture: 'Saitama', rank: 4 },
-                    { name: 'H.ISHIDA', prefecture: 'Yamagata', rank: 5 },
-                    { name: 'R.SEIKE', prefecture: 'Osaka', rank: 5 },
-                    { name: 'K.MUKUNASHI', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'T.TAKADA', prefecture: 'Aomori', rank: 'R6' },
-                    { name: 'K.KUSUNOKI', prefecture: 'Shimane', rank: 4 },
-                    { name: 'R.SUZUKI', prefecture: 'Chiba', rank: 4 },
-                    { name: 'E.KANASAKI', prefecture: 'Toyama', rank: 4 },
-                    { name: 'M.KUROKI', prefecture: 'Oita', rank: 5 },
-                    { name: 'T.MURAKAMI', prefecture: 'Ehime', rank: 'R6' },
-                    
-                    // Right side of bracket (32 players)
-                    { name: 'K.NAKAZAWA', prefecture: 'Kochi', rank: 'R6' },
-                    { name: 'S.MATSUI', prefecture: 'Tochigi', rank: 5 },
-                    { name: 'K.MATSUZAKI', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'T.NAGANO', prefecture: 'Hyogo', rank: 'R6' },
-                    { name: 'S.HAMASAKI', prefecture: 'Kagoshima', rank: 6 },
-                    { name: 'K.KUNIYASU', prefecture: 'Akita', rank: 5 },
-                    { name: 'K.OKA', prefecture: 'Saga', rank: 5 },
-                    { name: 'S.KANO', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'K.KIMURA', prefecture: 'Osaka', rank: 5 },
-                    { name: 'H.SAKAMOTO', prefecture: 'Shimane', rank: 'R6' },
-                    { name: 'K.HASHIMOTO', prefecture: 'Saitama', rank: 'R7' },
-                    { name: 'K.HAYASHIDA', prefecture: 'Nagasaki', rank: 6 },
-                    { name: 'S.OTANI', prefecture: 'Fukushima', rank: 'R6' },
-                    { name: 'H.ABIRU', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'Y.KUDAMATSU', prefecture: 'Aichi', rank: 5 },
-                    { name: 'M.TABATA', prefecture: 'Niigata', rank: 3 },
-                    { name: 'H.NISHIMURA', prefecture: 'Kumamoto', rank: 'R7' },
-                    { name: 'Y.YAMAGUCHI', prefecture: 'Yamanashi', rank: 6 },
-                    { name: 'Y.NOMURA', prefecture: 'Kanagawa', rank: 'R7' },
-                    { name: 'T.YAMURA', prefecture: 'Yamaguchi', rank: 5 },
-                    { name: 'K.HOSHIKO', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'T.TSURUHAMA', prefecture: 'Osaka', rank: 5 },
-                    { name: 'Y.ITO', prefecture: 'Gifu', rank: 5 },
-                    { name: 'S.IZAWA', prefecture: 'Hokkaido', rank: 6 },
-                    { name: 'Y.SASAKI', prefecture: 'Chiba', rank: 5 },
-                    { name: 'R.NISHIDA', prefecture: 'Tokushima', rank: 6 },
-                    { name: 'S.OGURA', prefecture: 'Wakayama', rank: 5 },
-                    { name: 'M.FURUDATE', prefecture: 'Iwate', rank: 'R7' },
-                    { name: 'S.ABEMATSU', prefecture: 'Saitama', rank: 6 },
-                    { name: 'S.TOMITA', prefecture: 'Fukui', rank: 6 },
-                    { name: 'R.GOYA', prefecture: 'Kyoto', rank: 'R6' },
-                    { name: 'R.IKEDA', prefecture: 'Fukuoka', rank: 4 }
-                ];
-
-                const womenPlayersData = [
-                    { name: 'R.KUSUNOSE', prefecture: 'Kagawa', rank: 4 },
-                    { name: 'A.SEKIKAWA', prefecture: 'Hokkaido', rank: 4 },
-                    { name: 'A.YAMADA', prefecture: 'Shizuoka', rank: 4 },
-                    { name: 'M.KONDO', prefecture: 'Tokyo', rank: 6 },
-                    { name: 'K.SHINOHARA', prefecture: 'Nara', rank: 'R6' },
-                    { name: 'S.NAKAMURA', prefecture: 'Ibaraki', rank: 3 },
-                    { name: 'A.SHOJIMA', prefecture: 'Saga', rank: 4 },
-                    { name: 'M.HATSUKANO', prefecture: 'Tottori', rank: 5 },
-                    { name: 'H.MIZUKAWA', prefecture: 'Osaka', rank: 4 },
-                    { name: 'A.SHITO', prefecture: 'Saitama', rank: 6 },
-                    { name: 'M.YOKOYAMA', prefecture: 'Ishikawa', rank: 3 },
-                    { name: 'K.HIGASHINO', prefecture: 'Aichi', rank: 4 },
-                    { name: 'M.SUENAGA', prefecture: 'Wakayama', rank: 'R7' },
-                    { name: 'A.ISHIJIMA', prefecture: 'Tochigi', rank: 3 },
-                    { name: 'Y.SATO', prefecture: 'Akita', rank: 4 },
-                    { name: 'S.KAKIMOTO', prefecture: 'Fukuoka', rank: 4 },
-                    { name: 'M.SATO', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'K.KIKUCHI', prefecture: 'Kagoshima', rank: 3 },
-                    { name: 'A.WATANABE', prefecture: 'Ehime', rank: 5 },
-                    { name: 'M.OKOMA', prefecture: 'Gunma', rank: 2 },
-                    { name: 'K.FUJISAKI', prefecture: 'Osaka', rank: 5 },
-                    { name: 'K.MORIZONO', prefecture: 'Gifu', rank: 3 },
-                    { name: 'M.TAKAHASHI', prefecture: 'Kanagawa', rank: 'R6' },
-                    { name: 'M.SAITO', prefecture: 'Yamagata', rank: 5 },
-                    { name: 'H.HASHIMOTO', prefecture: 'Yamaguchi', rank: 3 },
-                    { name: 'N.TAMAI', prefecture: 'Chiba', rank: 4 },
-                    { name: 'A.KIMURA', prefecture: 'Hyogo', rank: 'R6' },
-                    { name: 'M.NAKATSUKA', prefecture: 'Kumamoto', rank: 3 },
-                    { name: 'M.OGAWA', prefecture: 'Aichi', rank: 5 },
-                    { name: 'K.KOMATSU', prefecture: 'Miyagi', rank: 5 },
-                    { name: 'H.NAKAMURA', prefecture: 'Saitama', rank: 4 },
-                    { name: 'H.UEKI', prefecture: 'Niigata', rank: 4 },
-                    { name: 'A.ONIZUKA', prefecture: 'Chiba', rank: 5 },
-                    { name: 'N.KIFA', prefecture: 'Okinawa', rank: 4 },
-                    { name: 'Y.MIYABE', prefecture: 'Shiga', rank: 3 },
-                    { name: 'S.AWAJI', prefecture: 'Aomori', rank: 4 },
-                    { name: 'M.SENO', prefecture: 'Fukuoka', rank: 5 },
-                    { name: 'A.NISHIO', prefecture: 'Kochi', rank: 4 },
-                    { name: 'K.MORIYAMA', prefecture: 'Shimane', rank: 6 },
-                    { name: 'N.UESUGI', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'A.OZAKI', prefecture: 'Kyoto', rank: 'R6' },
-                    { name: 'H.FUKUHARA', prefecture: 'Toyama', rank: 4 },
-                    { name: 'H.ISHIDA', prefecture: 'Okayama', rank: 4 },
-                    { name: 'H.RYU', prefecture: 'Tokyo', rank: 4 },
-                    { name: 'M.OZONO', prefecture: 'Nagasaki', rank: 5 },
-                    { name: 'M.TAKENAKA', prefecture: 'Ibaraki', rank: 5 },
-                    { name: 'M.MITSUISHI', prefecture: 'Yamanashi', rank: 6 },
-                    { name: 'K.KAWAI', prefecture: 'Shizuoka', rank: 4 },
-                    { name: 'M.SAKAI', prefecture: 'Chiba', rank: 5 },
-                    { name: 'S.OGAWA', prefecture: 'Hyogo', rank: 4 },
-                    { name: 'N.ONISHI', prefecture: 'Fukui', rank: 6 },
-                    { name: 'M.ANDO', prefecture: 'Aichi', rank: 4 },
-                    { name: 'W.IGARASHI', prefecture: 'Fukushima', rank: 3 },
-                    { name: 'R.OGAWA', prefecture: 'Saitama', rank: 5 },
-                    { name: 'M.YOKOZAWA', prefecture: 'Hiroshima', rank: 5 },
-                    { name: 'R.YAMASAKI', prefecture: 'Miyazaki', rank: 5 },
-                    { name: 'Y.OSHIMA', prefecture: 'Osaka', rank: 4 },
-                    { name: 'A.NAKA', prefecture: 'Mie', rank: 3 },
-                    { name: 'C.MATSUMOTO', prefecture: 'Kanagawa', rank: 5 },
-                    { name: 'M.KITAZAWA', prefecture: 'Nagano', rank: 4 },
-                    { name: 'C.OMOTE', prefecture: 'Tokyo', rank: 5 },
-                    { name: 'K.FUJISAWA', prefecture: 'Iwate', rank: 'R6' },
-                    { name: 'C.IWAHARA', prefecture: 'Tokushima', rank: 4 },
-                    { name: 'E.KONAKAHARA', prefecture: 'Oita', rank: 3 }
-                ];
-
-                this.menPlayers = menPlayersData.map((p, i) => ({
-                    id: i + 1,
-                    ...p
-                }));
-
-                this.womenPlayers = womenPlayersData.map((p, i) => ({
-                    id: i + 1,
-                    ...p
-                }));
-            },
-
-            switchGender(gender) {
-                this.currentGender = gender;
-                this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
-                this.bracket = {};
-                this.currentUser = '';
-                document.getElementById('userName').value = '';
-                
-                // Update UI
-                document.body.className = gender === 'women' ? 'women' : '';
-                document.getElementById('bracketTitle').textContent = 
-                    `All Japan Kendo Championship - ${gender === 'men' ? "Men's" : "Women's"} Bracket`;
-                document.getElementById('menBtn').classList.toggle('active', gender === 'men');
-                document.getElementById('womenBtn').classList.toggle('active', gender === 'women');
-                
-                // Reload data for this gender
-                this.checkLockStatus();
-                this.loadActualResults();
-                this.renderBracket();
-                this.updateLeaderboard();
-                this.updateBracketCount();
-                this.updateChampionChart();
-            },
-
-            async checkLockStatus() {
-                try {
-                    const lockDoc = await db.collection('settings-' + this.currentGender).doc('tournament').get();
-                    if (lockDoc.exists) {
-                        this.isLocked = lockDoc.data().locked || false;
-                        if (this.isLocked) {
-                            document.getElementById('lockedNotice').style.display = 'block';
-                        } else {
-                            document.getElementById('lockedNotice').style.display = 'none';
-                        }
-                    } else {
-                        this.isLocked = false;
-                        document.getElementById('lockedNotice').style.display = 'none';
-                    }
-                } catch (error) {
-                    console.error('Error checking lock status:', error);
-                }
-            },
-
-            async updateBracketCount() {
-                try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
-                    const count = bracketsSnapshot.size;
-                    document.getElementById('bracketCount').textContent = `📊 ${count} Bracket${count !== 1 ? 's' : ''} Submitted`;
-                } catch (error) {
-                    console.error('Error counting brackets:', error);
-                    document.getElementById('bracketCount').textContent = '📊 Error loading count';
-                }
-            },
-
-            async updateChampionChart() {
-                try {
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
-                    
-                    if (bracketsSnapshot.empty) {
-                        document.getElementById('championChart').style.display = 'none';
-                        return;
-                    }
-
-                    // Count champion predictions (winner of round 5)
-                    const championCounts = {};
-                    
-                    bracketsSnapshot.forEach(doc => {
-                        const data = doc.data();
-                        const finalRound = data.predictions[5]; // Round 5 is the finals
-                        if (finalRound && finalRound[0]) {
-                            const championId = finalRound[0];
-                            const champion = this.players.find(p => p.id === championId);
-                            if (champion) {
-                                const name = champion.name;
-                                championCounts[name] = (championCounts[name] || 0) + 1;
-                            }
-                        }
-                    });
-
-                    // Sort by count
-                    const sortedChampions = Object.entries(championCounts)
-                        .sort((a, b) => b[1] - a[1]);
-
-                    if (sortedChampions.length === 0) {
-                        document.getElementById('championChart').style.display = 'none';
-                        return;
-                    }
-
-                    // Show chart section
-                    document.getElementById('championChart').style.display = 'block';
-
-                    // Prepare data for pie chart
-                    const labels = sortedChampions.map(([name, count], index) => `#${index + 1} ${name}`);
-                    const data = sortedChampions.map(([name, count]) => count);
-
-                    const generateColors = (count) => {
-                        const colors = [];
-                        const borderColors = [];
-                        for (let i = 0; i < count; i++) {
-                            const hue = (i * 360 / count) % 360;
-                            colors.push(`hsla(${hue}, 70%, 60%, 0.8)`);
-                            borderColors.push(`hsla(${hue}, 70%, 50%, 1)`);
-                        }
-                        return { colors, borderColors };
-                    };
-
-                    const { colors, borderColors } = generateColors(labels.length);
-                    
-                    // Destroy existing chart if it exists
-                    if (this.championChart) {
-                        this.championChart.destroy();
-                    }
-
-                    // Create pie chart
-                    const ctx = document.getElementById('pieChart').getContext('2d');
-                    this.championChart = new Chart(ctx, {
-                        type: 'pie',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: data,
-                                backgroundColor: colors,
-                                borderColor: borderColors,
-                                borderWidth: 2
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                    labels: {
-                                        padding: 15,
-                                        font: {
-                                            size: 13
-                                        }
-                                    }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const label = context.label || '';
-                                            const value = context.parsed || 0;
-                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                            const percentage = ((value / total) * 100).toFixed(1);
-                                            return `${label}: ${value} predictions (${percentage}%)`;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                } catch (error) {
-                    console.error('Error updating champion chart:', error);
-                }
-            },
-
-            async toggleLock() {
-                try {
-                    this.isLocked = !this.isLocked;
-                    
-                    await db.collection('settings-' + this.currentGender).doc('tournament').set({
-                        locked: this.isLocked,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                    
-                    const lockBtn = document.getElementById('lockBtn');
-                    const lockedNotice = document.getElementById('lockedNotice');
-                    
-                    if (this.isLocked) {
-                        lockBtn.textContent = '🔓 Unlock Submissions';
-                        lockedNotice.style.display = 'block';
-                        alert('Tournament locked! Users can no longer submit or modify brackets.');
-                    } else {
-                        lockBtn.textContent = '🔒 Lock Submissions';
-                        lockedNotice.style.display = 'none';
-                        alert('Tournament unlocked! Users can now submit brackets again.');
-                    }
-                } catch (error) {
-                    alert('Error toggling lock: ' + error.message);
-                }
-            },
-
-            saveBracket() {
-                if (this.isLocked && !this.adminMode) {
-                    alert('Tournament is locked! Bracket submissions are no longer allowed.');
-                    return;
-                }
-                
-                const userName = document.getElementById('userName').value.trim();
-                if (!userName) {
-                    alert('Please enter your name!');
-                    return;
-                }
-
-                // Save to Firebase Firestore with gender suffix
-                db.collection('brackets-' + this.currentGender).doc(userName).set({
-                    predictions: this.bracket,
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                }).then(() => {
-                    alert(`Bracket saved for ${userName}!`);
-                    
-                    // Clear name and bracket after saving
-                    document.getElementById('userName').value = '';
-                    this.bracket = {};
-                    this.currentUser = '';
-                    this.renderBracket();
-                    this.updateBracketCount();
-                    this.updateChampionChart();
-                }).catch((error) => {
-                    alert('Error saving bracket: ' + error.message);
-                });
-            },
-
-            async toggleAdminMode() {
-                if (!this.adminMode) {
-                    // Trying to enter admin mode - require password
-                    const password = prompt('Enter admin password:');
-                    if (password !== 'kendo2025') {
-                        alert('Incorrect password!');
-                        return;
-                    }
-                    this.adminMode = true;
-                    
-                    // Clear name and bracket when entering admin mode
-                    document.getElementById('userName').value = '';
-                    this.currentUser = '';
-                    
-                    // Update lock button text based on current status
-                    const lockBtn = document.getElementById('lockBtn');
-                    lockBtn.textContent = this.isLocked ? '🔓 Unlock Submissions' : '🔒 Lock Submissions';
-                    
-                    // Load actual results from Firebase if they exist
-                    try {
-                        const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
-                        if (resultsDoc.exists) {
-                            this.bracket = resultsDoc.data().predictions || {};
-                        } else {
-                            this.bracket = {};
-                        }
-                    } catch (error) {
-                        console.error('Error loading results:', error);
-                        this.bracket = {};
-                    }
-                } else {
-                    // Exiting admin mode
-                    this.adminMode = false;
-                    
-                    // Clear name and bracket when exiting admin mode
-                    document.getElementById('userName').value = '';
-                    this.bracket = {};
-                    this.currentUser = '';
-                }
-                
-                const indicator = document.getElementById('modeIndicator');
-                const modeText = document.getElementById('modeText');
-                if (this.adminMode) {
-                    modeText.textContent = '⚙️ ADMIN MODE - Enter Actual Results';
-                    indicator.style.display = 'flex';
-                    indicator.style.justifyContent = 'center';
-                    indicator.style.alignItems = 'center';
-                } else {
-                    indicator.style.display = 'none';
-                }
-                this.renderBracket();
-            },
-
-            async clearAll() {
-                if (confirm('Are you sure you want to clear ALL data for this bracket? This cannot be undone!')) {
-                    try {
-                        // Delete all brackets for current gender
-                        const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
-                        const deletePromises = [];
-                        bracketsSnapshot.forEach(doc => {
-                            deletePromises.push(doc.ref.delete());
-                        });
-                        
-                        // Delete actual results for current gender
-                        deletePromises.push(db.collection('actualResults-' + this.currentGender).doc('current').delete());
-                        
-                        await Promise.all(deletePromises);
-                        
-                        this.bracket = {};
-                        this.adminMode = false;
-                        document.getElementById('userName').value = '';
-                        this.renderBracket();
-                        this.updateLeaderboard();
-                        this.updateBracketCount();
-                        this.updateChampionChart();
-                        alert('All data cleared for this bracket!');
-                    } catch (error) {
-                        alert('Error clearing data: ' + error.message);
-                    }
-                }
-            },
-
-            selectWinner(round, matchup, playerId) {
-                if (!this.bracket[round]) {
-                    this.bracket[round] = {};
-                }
-                this.bracket[round][matchup] = playerId;
-
-                if (this.adminMode) {
-                    // Save actual results to Firebase with gender suffix
-                    db.collection('actualResults-' + this.currentGender).doc('current').set({
-                        predictions: this.bracket,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    }).then(() => {
-                        this.updateLeaderboard();
-                    }).catch((error) => {
-                        console.error('Error saving results:', error);
-                    });
-                }
-
-                this.renderBracket();
-            },
-
-            getRoundMatches(round) {
-                // Round 0 (Round of 64): 32 matches with 64 players
-                // Round 1 (Round of 32): 16 matches
-                // Round 2 (Round of 16): 8 matches
-                // Round 3 (Quarterfinals): 4 matches
-                // Round 4 (Semifinals): 2 matches
-                // Round 5 (Finals): 1 match
-                const matchCount = 32 / Math.pow(2, round);
-                const matches = [];
-
-                for (let i = 0; i < matchCount; i++) {
-                    if (round === 0) {
-                        matches.push({
-                            player1: this.players[i * 2],
-                            player2: this.players[i * 2 + 1]
-                        });
-                    } else {
-                        const prevRound = round - 1;
-                        const match1 = i * 2;
-                        const match2 = i * 2 + 1;
-                        
-                        const winner1 = this.bracket[prevRound]?.[match1];
-                        const winner2 = this.bracket[prevRound]?.[match2];
-
-                        matches.push({
-                            player1: winner1 ? this.players.find(p => p.id === winner1) : null,
-                            player2: winner2 ? this.players.find(p => p.id === winner2) : null
-                        });
-                    }
-                }
-
-                return matches;
-            },
-
-            renderBracket() {
-                const bracketDiv = document.getElementById('bracket');
-                const rounds = ['Round of 64', 'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals', 'Finals'];
-                
-                let html = '';
-
-                for (let round = 0; round < 6; round++) {
-                    const matches = this.getRoundMatches(round);
-                    html += `<div class="round round-${round}">`;
-                    html += `<div class="round-title">${rounds[round]}</div>`;
-
-                    matches.forEach((match, matchIndex) => {
-                        // Determine if this match needs connectors
-                        let connectorClass = '';
-                        if (round < 5) { // Not the final round
-                            if (matchIndex % 2 === 0) {
-                                // Top match of pair
-                                connectorClass = 'has-connector connector-down';
-                            } else {
-                                // Bottom match of pair
-                                connectorClass = 'has-connector connector-up';
-                            }
-                        }
-                        
-                        html += `<div class="matchup ${connectorClass}">`;
-                        
-                        if (match.player1) {
-                            const isSelected = this.bracket[round]?.[matchIndex] === match.player1.id;
-                            const classes = this.getPlayerClasses(round, matchIndex, match.player1.id, isSelected);
-                            html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player1.id})">
-                                <span class="rank">${match.player1.rank}</span>
-                                <span class="player-name">${match.player1.name}</span>
-                                <span class="prefecture">${match.player1.prefecture}</span>
-                            </div>`;
-                        } else {
-                            html += `<div class="player" style="opacity: 0.3;">TBD</div>`;
-                        }
-
-                        if (match.player2) {
-                            const isSelected = this.bracket[round]?.[matchIndex] === match.player2.id;
-                            const classes = this.getPlayerClasses(round, matchIndex, match.player2.id, isSelected);
-                            html += `<div class="player ${classes}" onclick="app.selectWinner(${round}, ${matchIndex}, ${match.player2.id})">
-                                <span class="rank">${match.player2.rank}</span>
-                                <span class="player-name">${match.player2.name}</span>
-                                <span class="prefecture">${match.player2.prefecture}</span>
-                            </div>`;
-                        } else {
-                            html += `<div class="player" style="opacity: 0.3;">TBD</div>`;
-                        }
-
-                        html += `</div>`;
-                    });
-
-                    html += `</div>`;
-                }
-
-                bracketDiv.innerHTML = html;
-            },
-
-            getPlayerClasses(round, matchIndex, playerId, isSelected) {
-                let classes = '';
-                if (isSelected) classes += 'selected ';
-
-                if (!this.adminMode && this.actualResults) {
-                    if (this.actualResults[round]?.[matchIndex]) {
-                        if (this.actualResults[round][matchIndex] === playerId) {
-                            classes += 'correct';
-                        } else if (isSelected) {
-                            classes += 'incorrect';
-                        }
-                    }
-                }
-
-                return classes;
-            },
-
-            async updateLeaderboard() {
-                try {
-                    // Load actual results from Firebase with gender suffix
-                    const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
-                    if (!resultsDoc.exists) {
-                        // No results yet - show empty message
-                        document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No results entered yet. Leaderboard will appear once the admin enters tournament results.</p>';
-                        this.actualResults = null;
-                        return;
-                    }
-
-                    const actualResults = resultsDoc.data().predictions || {};
-                    this.actualResults = actualResults;
-                    
-                    // Load all brackets from Firebase for current gender
-                    const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
-                    
-                    if (bracketsSnapshot.empty) {
-                        document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No brackets submitted yet.</p>';
-                        return;
-                    }
-                    
-                    const scores = [];
-
-                    bracketsSnapshot.forEach(doc => {
-                        const data = doc.data();
-                        let score = 0;
-                        let roundPoints = [1, 2, 4, 8, 16, 32]; // Points per round
-
-                        for (let round = 0; round < 6; round++) {
-                            const userPicks = data.predictions[round] || {};
-                            const actual = actualResults[round] || {};
-
-                            Object.keys(actual).forEach(matchup => {
-                                if (userPicks[matchup] === actual[matchup]) {
-                                    score += roundPoints[round];
-                                }
-                            });
-                        }
-
-                        scores.push({ name: doc.id, score });
-                    });
-
-                    // Sort by score (descending), then by name (alphabetically) for ties
-                    scores.sort((a, b) => {
-                        if (b.score !== a.score) {
-                            return b.score - a.score;
-                        }
-                        return a.name.localeCompare(b.name);
-                    });
-
-                    let html = '';
-                    let currentRank = 1;
-                    let previousScore = null;
-
-                    scores.forEach((entry, index) => {
-                        // Update rank only if score is different from previous
-                        if (previousScore !== null && entry.score !== previousScore) {
-                            currentRank = index + 1;
-                        }
-                        previousScore = entry.score;
-                        
-                        const topClass = currentRank <= 3 ? 'top' : '';
-                        const medal = currentRank === 1 ? '🥇' : currentRank === 2 ? '🥈' : currentRank === 3 ? '🥉' : '';
-                        html += `<div class="leaderboard-entry ${topClass}">
-                            <span><span class="rank">#${currentRank}</span> ${medal} ${entry.name}</span>
-                            <span><strong>${entry.score}</strong> points</span>
-                        </div>`;
-                    });
-
-                    document.getElementById('leaderboardContent').innerHTML = html;
-                    
-                    // Re-render bracket to show correct/incorrect picks
-                    this.renderBracket();
-                } catch (error) {
-                    console.error('Error updating leaderboard:', error);
-                    document.getElementById('leaderboardContent').innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading leaderboard</p>';
-                }
-            },
-
-            toggleLeaderboard() {
-                const leaderboard = document.getElementById('leaderboard');
-                if (leaderboard.style.display === 'none') {
-                    leaderboard.style.display = 'block';
-                    leaderboard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                } else {
-                    leaderboard.style.display = 'none';
-                }
-            },
-
-        async viewAllBrackets() {
-            document.getElementById('userName').value = '';
-            this.bracket = {};
-            this.currentUser = '';
-            this.renderBracket();
-            
-            const bracketsList = document.getElementById('bracketsList');
-            
-            try {
-                const bracketsSnapshot = await db.collection('brackets-' + this.currentGender).get();
-                
-                if (bracketsSnapshot.empty) {
-                    bracketsList.innerHTML = '<p style="text-align: center; color: #666;">No brackets saved yet!</p>';
-                } else {
-                    let html = '';
-                    bracketsSnapshot.forEach(doc => {
-                        const data = doc.data();
-                        const name = doc.id;
-                        const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Unknown date';
-                        html += `<div class="bracket-item" data-username="${name.replace(/"/g, '&quot;')}">
-                            <div class="bracket-info">
-                                <div class="bracket-name">${name}</div>
-                                <div class="bracket-date">Saved: ${date}</div>
-                            </div>
-                            <button class="view-bracket-btn">View →</button>
-                        </div>`;
-                    });
-                    bracketsList.innerHTML = html;
-                    
-                    // Add event listeners after HTML is inserted
-                    document.querySelectorAll('.bracket-item').forEach(item => {
-                        item.addEventListener('click', () => {
-                            const username = item.getAttribute('data-username');
-                            app.loadSpecificBracket(username);
-                        });
-                    });
-                }
-            } catch (error) {
-                bracketsList.innerHTML = '<p style="text-align: center; color: #ff0000;">Error loading brackets</p>';
-                console.error('Error loading brackets:', error);
-            }
-            
-            document.getElementById('bracketsModal').style.display = 'block';
-        },
-
-            async loadSpecificBracket(userName) {
-                try {
-                    const docRef = await db.collection('brackets-' + this.currentGender).doc(userName).get();
-                    if (docRef.exists) {
-                        const data = docRef.data();
-                        this.bracket = data.predictions;
-                        this.currentUser = userName;
-                        document.getElementById('userName').value = userName;
-                        this.renderBracket();
-                        this.closeModal();
-                    }
-                } catch (error) {
-                    console.error('Error loading bracket:', error);
-                    alert('Error loading bracket');
-                }
-            },
-
-            closeModal() {
-                document.getElementById('bracketsModal').style.display = 'none';
-            }, 
-
-            async loadActualResults() {
-                try {
-                    const resultsDoc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
-                    if (resultsDoc.exists) {
-                        const actualResults = resultsDoc.data().predictions || {};
-                        this.actualResults = actualResults;
-                        // For non-admin users, display the actual results in the bracket
-                        if (!this.adminMode) {
-                            this.bracket = actualResults;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error loading actual results:', error);
-                }
-            }
-        };
-
-        
-
-        // Initialize the app
-        app.init();
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('bracketsModal');
-            if (event.target == modal) {
-                app.closeModal();
-            }
-        }
-    </script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
