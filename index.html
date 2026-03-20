@@ -13,6 +13,9 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <!-- html2canvas for bracket screenshots -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,14 +33,14 @@
             <span class="landing-nav-logo">AJKC MADNESS</span>
             <div class="landing-nav-links">
                 <a href="#howToPlay">HOW TO PLAY</a>
-                <a href="#scoring">SCORING</a>
+                <a href="#" onclick="event.preventDefault();app.showSignInModal()" id="landingSignIn" class="landing-nav-signin">SIGN IN</a>
             </div>
         </nav>
 
         <div class="landing-content">
             <!-- Hero section -->
             <section class="landing-hero">
-                <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMEN'S KENDO CHAMPIONSHIP</div>
+                <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMEN'S KENDO CHAMPIONSHIP<br><span style="opacity:0.6;font-size:0.85em;">第74回全日本剣道選手権大会 | 第65回全日本女子剣道選手権大会</span></div>
                 <h1 class="landing-title">AJKC<br><span class="landing-accent">MADNESS</span></h1>
 
                 <div class="landing-countdown" id="countdown">
@@ -54,8 +57,8 @@
                 </div>
 
                 <div class="landing-buttons">
-                    <button class="landing-btn men" onclick="app.enterBracket('men')">MEN'S BRACKET</button>
-                    <button class="landing-btn women" onclick="app.enterBracket('women')">WOMEN'S BRACKET</button>
+                    <button class="landing-btn men" onclick="app.enterBracket('men')">MEN'S BRACKET<br><small style="opacity:0.7;font-size:0.7em;">男子の部</small></button>
+                    <button class="landing-btn women" onclick="app.enterBracket('women')">WOMEN'S BRACKET<br><small style="opacity:0.7;font-size:0.7em;">女子の部</small></button>
                 </div>
 
                 <div class="landing-stats" id="landingStats"></div>
@@ -63,45 +66,28 @@
 
             <!-- How to Play -->
             <section class="landing-section" id="howToPlay">
-                <h2 class="section-title">HOW TO PLAY</h2>
+                <h2 class="section-title">HOW TO PLAY <span style="color:var(--kendo-gold);font-size:0.7em;">遊び方</span></h2>
                 <div class="htp-cards">
                     <div class="htp-card">
                         <span class="htp-num">01</span>
-                        <h3>PICK WINNERS</h3>
+                        <h3>PICK WINNERS <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">勝者予想</span></h3>
                         <p>Select the winner for every match from the Round of 64 to the Finals.</p>
                     </div>
                     <div class="htp-card">
                         <span class="htp-num">02</span>
-                        <h3>EARN POINTS</h3>
+                        <h3>EARN POINTS <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">得点獲得</span></h3>
                         <p>Get points for every correct pick and successful advancement.</p>
                     </div>
                     <div class="htp-card">
                         <span class="htp-num">03</span>
-                        <h3>ESCALATING STAKES</h3>
-                        <p>Later rounds carry more weight. Precision becomes critical as the field narrows.</p>
+                        <h3>PREDICT <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">予測</span></h3>
+                        <p>Make your predictions until the tournament, when the results will determine the final bracket.</p>
                     </div>
                     <div class="htp-card htp-card-highlight">
                         <span class="htp-num">04</span>
-                        <h3>WIN PRESTIGE</h3>
-                        <p>The top scorer at the end of the championship is crowned Bracket Champion.</p>
+                        <h3>WIN <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">優勝</span></h3>
+                        <p>The highest scores will earn fame, glory, and prizes!</p>
                     </div>
-                </div>
-            </section>
-
-            <!-- Scoring -->
-            <section class="landing-section" id="scoring">
-                <h2 class="section-title">SCORING BREAKDOWN</h2>
-                <div class="scoring-table-v2">
-                    <div class="scoring-header">
-                        <span>TOURNAMENT PHASE</span>
-                        <span>POINTS PER CORRECT PICK</span>
-                    </div>
-                    <div class="scoring-row-v2"><span>Round of 64</span><span><strong>1</strong> PT</span></div>
-                    <div class="scoring-row-v2"><span>Round of 32</span><span><strong>2</strong> PTS</span></div>
-                    <div class="scoring-row-v2"><span>Round of 16</span><span><strong>4</strong> PTS</span></div>
-                    <div class="scoring-row-v2"><span>Quarterfinals</span><span><strong>8</strong> PTS</span></div>
-                    <div class="scoring-row-v2"><span>Semifinals</span><span><strong>16</strong> PTS</span></div>
-                    <div class="scoring-row-v2 scoring-highlight"><span>Finals</span><span><strong>32</strong> PTS</span></div>
                 </div>
             </section>
 
@@ -115,14 +101,17 @@
             <div class="app-header-left">
                 <span class="app-title" onclick="app.goHome()" style="cursor:pointer;">AJKC MADNESS</span>
             </div>
+            <button class="mobile-menu-btn" onclick="document.querySelector('.app-nav').classList.toggle('nav-open')">☰</button>
             <nav class="app-nav">
-                <button class="nav-link active" onclick="void(0)">MY BRACKET</button>
-                <button class="nav-link" onclick="app.showLeaderboard()">LEADERBOARD</button>
+                <button class="nav-link active" id="navMyBracket" onclick="app.viewMyBracket()">MY BRACKET</button>
+                <button class="nav-link" id="navLeaderboard" onclick="app.showLeaderboard()">LEADERBOARD</button>
                 <button class="nav-link" onclick="app.showStats()">STATS</button>
+                <button class="nav-link" onclick="app.showScoringRules()">RULES</button>
                 <button class="nav-link" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
             </nav>
             <div class="app-header-right">
                 <button id="backToMineBtn" class="back-to-mine-btn" style="display: none;" onclick="app.viewMyBracket()">↩</button>
+                <button id="accountBtn" class="nav-icon-btn" onclick="app.showSignInModal()" title="Account">👤</button>
                 <button id="adminBtn" class="nav-icon-btn" onclick="app.toggleAdminMode()" title="Admin">⚙️</button>
             </div>
         </div>
@@ -142,7 +131,7 @@
             <button onclick="app.saveAdminResults()" style="margin-left: 10px;">Save Results</button>
             <button class="danger" onclick="app.clearAll()" style="margin-left: 10px;">Clear All Data</button>
             <button onclick="app.toggleLock()" style="margin-left: 10px;" id="lockBtn">Lock Submissions</button>
-            <span style="margin-left:16px;">Final Technique:</span>
+            <span style="margin-left:16px;">Final Ippon:</span>
             <select id="adminTechnique" style="margin-left:4px;padding:4px 8px;background:var(--surface-2);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">
                 <option value="">Not set</option>
                 <option value="men">Men</option>
@@ -164,6 +153,60 @@
         <div class="leaderboard" id="leaderboard" style="display: none;"></div>
     </div>
 
+    <!-- Scoring Rules modal -->
+    <div id="scoringRulesModal" class="modal">
+        <div class="modal-content" style="max-width:700px;">
+            <div class="modal-header">
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">SCORING FRAMEWORK <span style="color:var(--kendo-gold);font-size:0.7em;">採点方法</span></h2>
+                <span class="close" onclick="app.closeScoringRules()">&times;</span>
+            </div>
+            <div class="sr-body">
+                <h3 class="sr-section-title">POINTS DISTRIBUTION</h3>
+                <div class="sr-ribbon">
+                    <div class="sr-ribbon-card"><span class="sr-ribbon-round">R64</span><span class="sr-ribbon-pts">1 PT</span></div>
+                    <div class="sr-ribbon-card"><span class="sr-ribbon-round">R32</span><span class="sr-ribbon-pts">2 PTS</span></div>
+                    <div class="sr-ribbon-card"><span class="sr-ribbon-round">R16</span><span class="sr-ribbon-pts">4 PTS</span></div>
+                    <div class="sr-ribbon-card"><span class="sr-ribbon-round">QF</span><span class="sr-ribbon-pts">8 PTS</span></div>
+                    <div class="sr-ribbon-card"><span class="sr-ribbon-round">SF</span><span class="sr-ribbon-pts">16 PTS</span></div>
+                    <div class="sr-ribbon-card sr-ribbon-highlight"><span class="sr-ribbon-round">FINALS</span><span class="sr-ribbon-pts">32 PTS</span></div>
+                </div>
+
+                <div class="sr-bonus-cards">
+                    <div class="sr-bonus-card">
+                        <span class="sr-bonus-label">CORRECT PICK BONUS</span>
+                        <span class="sr-bonus-desc">Each correct prediction earns an additional +1 point</span>
+                        <span class="sr-bonus-pts">+1 PT</span>
+                    </div>
+                    <div class="sr-bonus-card">
+                        <span class="sr-bonus-label">IPPON BONUS</span>
+                        <span class="sr-bonus-desc">Correctly predict the final winning ippon</span>
+                        <span class="sr-bonus-pts">+5 PTS</span>
+                    </div>
+                    <div class="sr-bonus-card sr-bonus-gold">
+                        <span class="sr-bonus-label">PERFECT BRACKET BONUS</span>
+                        <span class="sr-bonus-desc">Get every single prediction correct</span>
+                        <span class="sr-bonus-pts">+50 PTS</span>
+                    </div>
+                </div>
+
+                <div class="sr-footnote">
+                    <p>Point values are cumulative. Each correct prediction adds to your total bracket score. In the event of a tie, the earliest bracket submission will be used as the tiebreaker.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign-in modal -->
+    <div id="signInModal" class="modal">
+        <div class="modal-content" style="max-width:420px;">
+            <div class="modal-header">
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:2px;">ACCOUNT</h2>
+                <span class="close" onclick="app.closeSignInModal()">&times;</span>
+            </div>
+            <div id="signInContent"></div>
+        </div>
+    </div>
+
     <!-- Leaderboard modal -->
     <div id="leaderboardModal" class="modal">
         <div class="modal-content lb-modal">
@@ -183,10 +226,14 @@
 
     <!-- Modal for viewing all brackets -->
     <div id="bracketsModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:600px;">
             <div class="modal-header">
-                <h2>All Saved Brackets</h2>
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">ALL BRACKETS</h2>
                 <span class="close" onclick="app.closeModal()">&times;</span>
+            </div>
+            <div style="padding:0 4px 12px;position:relative;">
+                <span style="position:absolute;left:16px;top:calc(50% - 6px);transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:0.9em;pointer-events:none;">&#128269;</span>
+                <input type="text" id="bracketSearch" class="submit-name-input" style="width:100%;padding-left:34px;" placeholder="Find bracket by name..." oninput="app.filterBrackets(this.value)" />
             </div>
             <div id="bracketsList" class="bracket-list"></div>
         </div>
@@ -194,14 +241,17 @@
 
     <!-- Stats modal -->
     <div id="statsModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:800px;">
             <div class="modal-header">
-                <h2>📊 Tournament Stats</h2>
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">TOURNAMENT STATS</h2>
                 <span class="close" onclick="app.closeStatsModal()">&times;</span>
             </div>
             <div id="statsContent"></div>
         </div>
     </div>
+
+    <!-- Toast container -->
+    <div id="toastContainer" class="toast-container"></div>
 
     <script src="js/firebase-config.js"></script>
     <script src="js/data.js"></script>

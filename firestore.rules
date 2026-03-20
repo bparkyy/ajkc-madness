@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Admin collection - only admins can read (to check their own status)
+    match /admins/{email} {
+      allow read: if request.auth != null;
+      allow write: if false; // Manually managed in Firebase Console
+    }
+
+    // Brackets - users can only write their own
+    match /brackets-men/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /brackets-women/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Actual results - anyone can read, only admins can write
+    match /actualResults-men/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    match /actualResults-women/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+
+    // Settings - anyone can read, only admins can write
+    match /settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.token.email));
+    }
+  }
+}

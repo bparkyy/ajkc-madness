@@ -43,11 +43,6 @@ const UI = {
 
         const oddsToggle = showOdds && odds && odds.total > 0
             ? `<div class="crowd-prediction-bar">
-                <span class="crowd-label">CROWD PREDICTION</span>
-                <div class="crowd-bar">
-                    <div class="crowd-fill-left" style="width:${odds.p1Pct}%"></div>
-                    <div class="crowd-fill-right" style="width:${odds.p2Pct}%"></div>
-                </div>
                 <span class="crowd-pcts">${odds.p1Pct}% vs ${odds.p2Pct}%</span>
             </div>`
             : '';
@@ -62,17 +57,14 @@ const UI = {
             return `<button class="round-tab${active}" ${disabled ? 'disabled' : `onclick="app.jumpToRound(${i})"`}>${label}</button>`;
         }).join('');
 
-        const finalsHeader = isFinals
-            ? `<div class="finals-badge">\u2694\ufe0f \u6c7a\u52dd \u2694\ufe0f</div>`
-            : '';
+        const finalsHeader = '';
 
         return `
             <div class="game-screen${finalsClass}">
                 <div class="round-tabs">${roundTabs}</div>
                 ${finalsHeader}
                 <div class="game-header">
-                    <div class="game-round-name">${this.escapeHtml(roundName)}</div>
-                    <div class="game-round-jp">${this.escapeHtml(roundNameJp || '')}</div>
+                    <div class="game-round-name">${isFinals ? '\u2694\ufe0f ' + this.escapeHtml(roundName) + ' \u2694\ufe0f' : this.escapeHtml(roundName)}</div>
                     <div class="game-match-info">Match ${matchIndex + 1} of ${totalMatches}</div>
                     <div class="game-progress"><div class="game-progress-fill" style="width:${progress}%"></div></div>
                 </div>
@@ -120,12 +112,10 @@ const UI = {
     // ── Bracket summary view ─────────────────────────────────────
 
     renderBracketSummary({ rounds, champion, isReadonly, isComplete, actualResults, viewingName }) {
-        const genderLabel = app.currentGender === 'men' ? "MEN'S BRACKET" : "WOMEN'S BRACKET";
-        const genderJp = app.currentGender === 'men' ? '男子' : '女子';
-
         // Status label
+        const genderLabel = app.currentGender === 'men' ? "MEN'S BRACKET" : "WOMEN'S BRACKET";
         const statusLabel = isReadonly && viewingName
-            ? `<div class="bracket-status-label">${this.escapeHtml(viewingName)}'s Bracket</div>`
+            ? `<div class="bracket-status-label">${this.escapeHtml(viewingName)}'s ${genderLabel}</div>`
             : isComplete
                 ? '<div class="bracket-status-label">BRACKET COMPLETED!</div>'
                 : '<div class="bracket-status-label bracket-status-progress">BRACKET IN PROGRESS</div>';
@@ -133,10 +123,10 @@ const UI = {
         // Big title
         const titleHtml = `<h1 class="bracket-page-title">AJKC BRACKET<br>CHALLENGE</h1>`;
 
-        // Gender tabs
-        const genderTabs = `<div class="bracket-gender-tabs">
-            <button id="menBtn" class="bracket-gender-tab${app.currentGender === 'men' ? ' active' : ''}" onclick="app.switchGender('men')">MEN'S BRACKET</button>
-            <button id="womenBtn" class="bracket-gender-tab${app.currentGender === 'women' ? ' active' : ''}" onclick="app.switchGender('women')">WOMEN'S BRACKET</button>
+        // Gender tabs (hide when viewing someone else's)
+        const genderTabs = isReadonly ? '' : `<div class="bracket-gender-tabs">
+            <button id="menBtn" class="bracket-gender-tab${app.currentGender === 'men' ? ' active' : ''}" onclick="app.switchGender('men')">MEN'S BRACKET <span style="opacity:0.5;font-size:0.85em;">男子</span></button>
+            <button id="womenBtn" class="bracket-gender-tab${app.currentGender === 'women' ? ' active' : ''}" onclick="app.switchGender('women')">WOMEN'S BRACKET <span style="opacity:0.5;font-size:0.85em;">女子</span></button>
         </div>`;
 
         // Stats card bar
@@ -160,27 +150,36 @@ const UI = {
             const userTech = document.getElementById('userTechnique')?.value || '';
             if (userTech && userTech === app._actualTechniqueCache) totalPoints += 5;
         }
+        // Correct picks bonus
+        totalPoints += correctPicks;
+        // Perfect bracket bonus
+        if (correctPicks === totalActual && totalActual > 0) totalPoints += 50;
         const precisionPct = totalActual > 0 ? Math.round((correctPicks / totalActual) * 100) : 0;
         const dateStr = app._submissionDate
-            ? app._submissionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()
+            ? app._submissionDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase() + ' ' + app._submissionDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
             : 'NOT YET';
         const championDisplay = champion || '\u2014';
+        const hasResults = actualResults && totalActual > 0;
         const statsBar = `<div class="bracket-stats-bar">
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">CORRECT PICKS</span>
-                <span class="bracket-stat-value">${actualResults ? correctPicks + ' / ' + totalActual : '\u2014'}</span>
+                <span class="bracket-stat-value">${hasResults ? correctPicks + ' / ' + totalActual : 'TBD'}</span>
             </div>
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">PRECISION RATE</span>
-                <span class="bracket-stat-value">${actualResults ? precisionPct + '%' : '\u2014'}</span>
+                <span class="bracket-stat-value">${hasResults ? precisionPct + '%' : 'TBD'}</span>
             </div>
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">POINTS SCORED</span>
-                <span class="bracket-stat-value">${actualResults ? totalPoints : '\u2014'}</span>
+                <span class="bracket-stat-value">${hasResults ? totalPoints : 'TBD'}</span>
             </div>
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">CHOSEN CHAMPION</span>
                 <span class="bracket-stat-value">${this.escapeHtml(championDisplay)}</span>
+            </div>
+            <div class="bracket-stat-card">
+                <span class="bracket-stat-label">CROWD SIMILARITY</span>
+                <span class="bracket-stat-value" id="bracketSimilarity">—</span>
             </div>
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">SUBMISSION DATE</span>
@@ -193,6 +192,7 @@ const UI = {
             ? `<div class="bracket-action-btns">
                 <button class="bracket-action-btn" onclick="app.saveBracket()">SUBMIT PREDICTIONS</button>
                 <button class="bracket-action-btn bracket-action-gold" onclick="app.startEditing()">EDIT PICKS</button>
+                <button class="bracket-action-btn" onclick="app.shareBracket()">DOWNLOAD BRACKET</button>
             </div>`
             : '';
 
@@ -224,14 +224,14 @@ const UI = {
                     <select id="submitLocation" class="submit-name-input"><option value="">Select country...</option></select>
                 </div>
                 <div class="bracket-name-field">
-                    <label class="submit-name-label" for="submitTechnique">Final winning technique <span style="opacity:0.5">(tiebreaker)</span></label>
+                    <label class="submit-name-label" for="submitTechnique">Final winning ippon <span style="opacity:0.5">(bonus)</span></label>
                     <select id="submitTechnique" class="submit-name-input">
-                        <option value="">Select technique...</option>
-                        <option value="men"${savedTechnique === 'men' ? ' selected' : ''}>Men (面)</option>
-                        <option value="kote"${savedTechnique === 'kote' ? ' selected' : ''}>Kote (小手)</option>
-                        <option value="do"${savedTechnique === 'do' ? ' selected' : ''}>Do (胴)</option>
-                        <option value="tsuki"${savedTechnique === 'tsuki' ? ' selected' : ''}>Tsuki (突き)</option>
-                        <option value="hansoku"${savedTechnique === 'hansoku' ? ' selected' : ''}>Hansoku (反則)</option>
+                        <option value="">Select ippon...</option>
+                        <option value="men"${savedTechnique === 'men' ? ' selected' : ''}>Men (メ)</option>
+                        <option value="kote"${savedTechnique === 'kote' ? ' selected' : ''}>Kote (コ)</option>
+                        <option value="dou"${savedTechnique === 'dou' ? ' selected' : ''}>Dou (ド)</option>
+                        <option value="tsuki"${savedTechnique === 'tsuki' ? ' selected' : ''}>Tsuki (ツ)</option>
+                        <option value="hansoku"${savedTechnique === 'hansoku' ? ' selected' : ''}>Hansoku (ハンソク)</option>
                     </select>
                 </div>
             </div>`
@@ -240,26 +240,6 @@ const UI = {
         const bracketVisualHtml = `<div class="bracket-tree-wrapper">
                 <div class="bracket-visual-area" id="bracketVisualArea"></div>
             </div>`;
-
-        // Scoring breakdown cards
-        const scoringHtml = `<div class="bracket-scoring-section">
-            <h3 class="bracket-scoring-title">SCORING BREAKDOWN</h3>
-            <div class="bracket-scoring-cards">
-                <div class="bracket-scoring-card"><span class="bsc-pts">1 PT</span><span class="bsc-round">ROUND OF 64</span></div>
-                <div class="bracket-scoring-card"><span class="bsc-pts">2 PTS</span><span class="bsc-round">ROUND OF 32</span></div>
-                <div class="bracket-scoring-card"><span class="bsc-pts">4 PTS</span><span class="bsc-round">ROUND OF 16</span></div>
-                <div class="bracket-scoring-card"><span class="bsc-pts">8 PTS</span><span class="bsc-round">QF</span></div>
-                <div class="bracket-scoring-card"><span class="bsc-pts">16 PTS</span><span class="bsc-round">SF</span></div>
-                <div class="bracket-scoring-card bracket-scoring-highlight"><span class="bsc-pts">32 PTS</span><span class="bsc-round">FINALS</span></div>
-                <div class="bracket-scoring-card bracket-scoring-highlight"><span class="bsc-pts">+5 PTS</span><span class="bsc-round">TECHNIQUE</span></div>
-            </div>
-            <div class="bracket-tiebreaker-info">
-                <h4 class="bracket-scoring-title" style="font-size:1em;margin-top:16px">TIEBREAKERS</h4>
-                <div class="tiebreaker-list">
-                    <div class="tiebreaker-item"><span>Earlier bracket submission wins</span></div>
-                </div>
-            </div>
-        </div>`;
 
         // Save reminder
         const reminderHtml = !isReadonly
@@ -283,7 +263,6 @@ const UI = {
                 ${resumeHtml}
                 <div style="text-align:center">${legendHtml}</div>
                 ${bracketVisualHtml}
-                ${scoringHtml}
             </div>`;
     }
 };

@@ -5,6 +5,16 @@ const ROUND_NAMES_SHORT = ['R64', 'R32', 'R16', 'QF', 'SF', 'F'];
 const ROUND_NAMES_JP = ['1回戦', '2回戦', '3回戦', '準々決勝', '準決勝', '決勝'];
 const ROUND_INTENSITY = [0, 0.15, 0.3, 0.5, 0.75, 1.0]; // 0 = calm, 1 = max drama
 
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    if (!container) { console.log(message); return; }
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
 const app = {
     players: [],
     menPlayers: [],
@@ -37,6 +47,7 @@ const app = {
         this.players = this.menPlayers;
         this.startCountdown();
         this.loadLandingStats();
+        this._checkShareLink();
     },
 
     /** Called after entering from landing page */
@@ -100,6 +111,9 @@ const app = {
     },
 
     goHome() {
+        if (this.hasAnyPicks() && !this.userBracketData) {
+            if (!confirm('You have unsaved picks. Leave anyway?')) return;
+        }
         document.getElementById('mainApp').style.display = 'none';
         document.getElementById('landingPage').style.display = 'block';
         this.loadLandingStats();
@@ -135,7 +149,7 @@ const app = {
                 await auth.signInWithRedirect(provider);
             } else {
                 console.error('Google sign-in error:', error);
-                alert('Google sign-in failed. Please try again.');
+                showToast('Google sign-in failed. Please try again.', 'error');
                 return false;
             }
         }
@@ -153,7 +167,285 @@ const app = {
             this.isAdmin = false;
         }
         UI.updateAuthUI(this.isAdmin);
-        await this.loadUserBracket();
+        this._updateAccountBtn();
+        // Skip reloading if migration is handling it
+        if (!this._migrating) {
+            await this.loadUserBracket();
+        }
+    },
+
+    // ── Account / Sign-in ───────────────────────────────────────
+
+    _updateAccountBtn() {
+        const btn = document.getElementById('accountBtn');
+        const landingBtn = document.getElementById('landingSignIn');
+        const user = this.currentUser;
+        const signedIn = user && !user.isAnonymous && user.email;
+        if (btn) {
+            btn.textContent = signedIn ? '✓' : '👤';
+            btn.title = signedIn ? user.email : 'Sign in';
+            btn.style.color = signedIn ? 'var(--kendo-gold)' : '';
+        }
+        if (landingBtn) {
+            landingBtn.textContent = signedIn ? 'SIGNED IN' : 'SIGN IN';
+        }
+    },
+
+    _setActiveNav(id) {
+        document.querySelectorAll('.app-nav .nav-link').forEach(btn => btn.classList.remove('active'));
+        const el = document.getElementById(id);
+        if (el) el.classList.add('active');
+    },
+
+    showSignInModal() {
+        const user = this.currentUser;
+        const content = document.getElementById('signInContent');
+        if (user && !user.isAnonymous && user.email) {
+            content.innerHTML = `
+                <div style="padding:20px;text-align:center;">
+                    <p style="color:rgba(255,255,255,0.5);font-size:0.8em;margin-bottom:8px;">Signed in as</p>
+                    <p style="color:white;font-size:1.1em;font-weight:600;margin-bottom:20px;">${UI.escapeHtml(user.email)}</p>
+                    <button class="bracket-action-btn" onclick="app.signOut()">SIGN OUT</button>
+                </div>`;
+        } else {
+            content.innerHTML = `
+                <div style="padding:20px;">
+                    <p style="color:rgba(255,255,255,0.5);font-size:0.85em;margin-bottom:20px;text-align:center;">
+                        Sign in to save your bracket across devices and prevent data loss.
+                    </p>
+                    <div style="display:flex;flex-direction:column;gap:12px;">
+                        <button class="bracket-action-btn bracket-action-gold" onclick="app.upgradeWithGoogle()" style="width:100%;justify-content:center;">
+                            SIGN IN WITH GOOGLE
+                        </button>
+                        <div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.8em;">or</div>
+                        <div style="display:flex;gap:8px;">
+                            <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;" />
+                            <button class="bracket-action-btn" onclick="app.sendEmailLink()">SEND LINK</button>
+                        </div>
+                        <p style="color:rgba(255,255,255,0.3);font-size:0.75em;text-align:center;">
+                            We'll send a sign-in link — no password needed.
+                        </p>
+                    </div>
+                </div>`;
+        }
+        document.getElementById('signInModal').style.display = 'block';
+    },
+
+    closeSignInModal() {
+        document.getElementById('signInModal').style.display = 'none';
+    },
+
+    async upgradeWithGoogle() {
+        const oldUid = this.currentUser?.uid;
+        const oldBracket = { ...this.bracket };
+        const oldUserData = this.userBracketData ? { ...this.userBracketData } : null;
+        this._migrating = true;
+        try {
+            await this.signInWithGoogle();
+            const newUid = auth.currentUser?.uid;
+            if (oldUid && newUid && oldUid !== newUid && (oldUserData || Object.keys(oldBracket).length > 0)) {
+                await this._migrateBracket(oldUid, newUid);
+            } else {
+                await this.loadUserBracket();
+            }
+            this._updateAccountBtn();
+            this.closeSignInModal();
+        } catch (e) {
+            console.error('Google upgrade error:', e);
+        } finally {
+            this._migrating = false;
+        }
+    },
+
+    async _migrateBracket(oldUid, newUid) {
+        try {
+            for (const gender of ['men', 'women']) {
+                const oldDoc = await db.collection('brackets-' + gender).doc(oldUid).get();
+                if (oldDoc.exists) {
+                    const newDoc = await db.collection('brackets-' + gender).doc(newUid).get();
+                    // Only migrate if new account doesn't already have a bracket
+                    if (!newDoc.exists) {
+                        await db.collection('brackets-' + gender).doc(newUid).set(oldDoc.data());
+                    }
+                    // Clean up old anonymous bracket
+                    await db.collection('brackets-' + gender).doc(oldUid).delete();
+                }
+            }
+            // Reload bracket for current gender
+            await this.loadUserBracket();
+        } catch (e) {
+            console.error('Bracket migration error:', e);
+        }
+    },
+
+    async sendEmailLink() {
+        const email = document.getElementById('emailSignInInput')?.value?.trim();
+        if (!email) { showToast('Please enter your email.', 'error'); return; }
+        const actionCodeSettings = {
+            url: window.location.href,
+            handleCodeInApp: true
+        };
+        try {
+            await auth.sendSignInLinkToEmail(email, actionCodeSettings);
+            localStorage.setItem('emailForSignIn', email);
+            showToast(`Sign-in link sent to ${email}!`, 'success');
+            this.closeSignInModal();
+        } catch (e) {
+            console.error('Email link error:', e);
+            showToast('Error sending email: ' + e.message, 'error');
+        }
+    },
+
+    async completeEmailSignIn() {
+        if (!auth.isSignInWithEmailLink(window.location.href)) return;
+        let email = localStorage.getItem('emailForSignIn');
+        if (!email) {
+            email = prompt('Please enter your email to confirm sign-in:');
+            if (!email) return;
+        }
+        const oldUid = auth.currentUser?.uid;
+        try {
+            const credential = firebase.auth.EmailAuthProvider.credentialWithLink(email, window.location.href);
+            if (auth.currentUser && auth.currentUser.isAnonymous) {
+                await auth.currentUser.linkWithCredential(credential);
+            } else {
+                await auth.signInWithCredential(credential);
+            }
+            const newUid = auth.currentUser?.uid;
+            if (oldUid && newUid && oldUid !== newUid) {
+                await this._migrateBracket(oldUid, newUid);
+            }
+            localStorage.removeItem('emailForSignIn');
+            window.history.replaceState(null, '', window.location.pathname);
+        } catch (e) {
+            console.error('Email sign-in completion error:', e);
+            if (e.code === 'auth/credential-already-in-use') {
+                await auth.signInWithCredential(e.credential);
+                const newUid = auth.currentUser?.uid;
+                if (oldUid && newUid && oldUid !== newUid) {
+                    await this._migrateBracket(oldUid, newUid);
+                }
+                localStorage.removeItem('emailForSignIn');
+                window.history.replaceState(null, '', window.location.pathname);
+            }
+        }
+    },
+
+    async signOut() {
+        try {
+            await auth.signOut();
+            await auth.signInAnonymously();
+            this.closeSignInModal();
+        } catch (e) {
+            console.error('Sign out error:', e);
+        }
+    },
+
+    async shareBracket() {
+        const nameInput = document.getElementById('submitName') || document.getElementById('userName');
+        const displayName = nameInput?.value?.trim() || 'My';
+        const genderLabel = this.currentGender === 'men' ? "Men's" : "Women's";
+        const title = `${displayName}'s ${genderLabel} Bracket`;
+
+        const bracketArea = document.querySelector('.bracket-tree-wrapper');
+        if (!bracketArea) {
+            showToast('No bracket to share!', 'error');
+            return;
+        }
+
+        showToast('Generating screenshot...', 'info');
+
+        // Temporarily add title header and footer to the bracket area
+        const titleEl = document.createElement('div');
+        titleEl.className = 'screenshot-title';
+        titleEl.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:1.8em;color:#d4a843;letter-spacing:3px;text-align:center;margin-bottom:4px;padding-top:8px;";
+        titleEl.textContent = title;
+        const subtitleEl = document.createElement('div');
+        subtitleEl.className = 'screenshot-title';
+        subtitleEl.style.cssText = "font-family:'Lexend',sans-serif;font-size:0.7em;color:rgba(255,255,255,0.3);text-align:center;margin-bottom:12px;letter-spacing:1px;";
+        subtitleEl.textContent = 'AJKC MADNESS — Bracket Challenge 2026';
+        const footerEl = document.createElement('div');
+        footerEl.className = 'screenshot-title';
+        footerEl.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:0.8em;color:rgba(255,255,255,0.2);text-align:center;margin-top:12px;padding-bottom:8px;letter-spacing:2px;";
+        footerEl.textContent = 'ajkcmadness.com';
+
+        // Insert title at top, footer at bottom
+        bracketArea.insertBefore(subtitleEl, bracketArea.firstChild);
+        bracketArea.insertBefore(titleEl, bracketArea.firstChild);
+        bracketArea.appendChild(footerEl);
+
+        // Redraw SVG lines to match current layout
+        this.drawBracketSVG();
+
+        try {
+            const canvas = await html2canvas(bracketArea, {
+                backgroundColor: '#0d1017',
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                scrollX: 0,
+                scrollY: -window.scrollY
+            });
+
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${displayName.replace(/[^a-zA-Z0-9]/g, '_')}_${this.currentGender}_bracket.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('Bracket downloaded!', 'success');
+            }, 'image/png');
+        } catch (e) {
+            console.error('Screenshot error:', e);
+            showToast('Error generating screenshot', 'error');
+        } finally {
+            // Remove temporary elements and redraw SVG
+            document.querySelectorAll('.screenshot-title').forEach(el => el.remove());
+            this.drawBracketSVG();
+        }
+    },
+
+    _checkShareLink() {
+        const hash = window.location.hash;
+        const match = hash.match(/^#bracket\/(men|women)\/(.+)$/);
+        if (match) {
+            const [, gender, uid] = match;
+            window.location.hash = '';
+            // Delay to let the app initialize
+            setTimeout(() => {
+                this.enterBracket(gender);
+                setTimeout(() => this.loadSpecificBracket(uid), 500);
+            }, 300);
+        }
+    },
+
+    async promptAccountUpgrade() {
+        if (!this.currentUser || !this.currentUser.isAnonymous) return;
+        const content = document.getElementById('signInContent');
+        content.innerHTML = `
+            <div style="padding:20px;">
+                <p style="color:var(--kendo-gold);font-family:'Bebas Neue',sans-serif;font-size:1.3em;letter-spacing:2px;text-align:center;margin-bottom:8px;">
+                    BRACKET SAVED!
+                </p>
+                <p style="color:rgba(255,255,255,0.5);font-size:0.85em;margin-bottom:20px;text-align:center;">
+                    Sign in to keep your bracket safe across devices. Without an account, your picks may be lost if you clear your browser data.
+                </p>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    <button class="bracket-action-btn bracket-action-gold" onclick="app.upgradeWithGoogle()" style="width:100%;justify-content:center;">
+                        SIGN IN WITH GOOGLE
+                    </button>
+                    <div style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.8em;">or</div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="email" id="emailSignInInput" class="submit-name-input" placeholder="Enter your email" style="flex:1;" />
+                        <button class="bracket-action-btn" onclick="app.sendEmailLink()">SEND LINK</button>
+                    </div>
+                    <button class="bracket-action-btn" onclick="app.closeSignInModal()" style="width:100%;text-align:center;opacity:0.5;">
+                        MAYBE LATER
+                    </button>
+                </div>
+            </div>`;
+        document.getElementById('signInModal').style.display = 'block';
     },
 
     // ── Gender switching ────────────────────────────────────────
@@ -167,7 +459,12 @@ const app = {
         this.gameRound = 0;
         this.gameMatch = 0;
         this._oddsCache = null;
+        this.showOdds = false;
         UI.showBackToMine(false);
+
+        // Clear technique for fresh load per gender
+        const techEl = document.getElementById('userTechnique');
+        if (techEl) techEl.value = '';
 
         document.body.className = gender === 'women' ? 'women' : '';
         document.getElementById('menBtn')?.classList.toggle('active', gender === 'men');
@@ -211,10 +508,10 @@ const app = {
                 this.isLocked ? '🔓 Unlock Submissions' : '🔒 Lock Submissions';
             document.getElementById('lockedNotice').style.display =
                 this.isLocked ? 'block' : 'none';
-            alert(this.isLocked
-                ? 'Both brackets locked! Users can no longer submit.'
-                : 'Both brackets unlocked! Users can now submit again.');
-        } catch (e) { alert('Error toggling lock: ' + e.message); }
+            showToast(this.isLocked
+                ? 'Both brackets locked!'
+                : 'Both brackets unlocked!', 'success');
+        } catch (e) { showToast('Error toggling lock: ' + e.message, 'error'); }
     },
 
     // ── Bracket persistence ─────────────────────────────────────
@@ -260,6 +557,9 @@ const app = {
                 this.gameState = 'picking';
                 this.gameRound = 0;
                 this.gameMatch = 0;
+                // Clear technique when no bracket exists for this gender
+                const techEl = document.getElementById('userTechnique');
+                if (techEl) techEl.value = '';
             }
             this.viewingOtherBracket = false;
             UI.showBackToMine(false);
@@ -276,7 +576,7 @@ const app = {
 
     saveBracket() {
         if (!this.currentUser) {
-            alert('Something went wrong — please refresh.');
+            showToast('Something went wrong — please refresh.', 'error');
             return;
         }
         const nameInput = document.getElementById('submitName') || document.getElementById('userName');
@@ -288,16 +588,16 @@ const app = {
         const scoreInput = document.getElementById('submitFinalScore') || document.getElementById('userFinalScore');
         const finalScore = scoreInput ? scoreInput.value : '';
         if (!displayName) {
-            alert('Please enter your name!');
+            showToast('Please enter your name!', 'error');
             if (nameInput) nameInput.focus();
             return;
         }
         if (this.isLocked && !this.adminMode) {
-            alert('Tournament is locked! Bracket submissions are no longer allowed.');
+            showToast('Tournament is locked!', 'error');
             return;
         }
         if (this.viewingOtherBracket) {
-            alert("You're viewing someone else's bracket. Click 'Back to My Bracket' first.");
+            showToast("You're viewing someone else's bracket.", 'error');
             return;
         }
 
@@ -310,9 +610,10 @@ const app = {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         }).then(() => {
             this.userBracketData = { ...this.bracket };
-            alert(`Bracket saved for ${displayName}!`);
+            showToast(`Bracket saved for ${displayName}!`, 'success');
             this.updateBracketCount();
-        }).catch(e => alert('Error saving bracket: ' + e.message));
+            this.promptAccountUpgrade();
+        }).catch(e => showToast('Error saving bracket: ' + e.message, 'error'));
     },
 
     // ── Admin mode ──────────────────────────────────────────────
@@ -326,7 +627,7 @@ const app = {
                 // Explicitly check admin status after sign-in
                 const user = auth.currentUser;
                 if (!user || !user.email) {
-                    alert('Sign-in failed — no email found.');
+                    showToast('Sign-in failed.', 'error');
                     return;
                 }
                 try {
@@ -337,7 +638,7 @@ const app = {
                     this.isAdmin = false;
                 }
                 if (!this.isAdmin) {
-                    alert('You are not authorised as an admin. Make sure your email is in the admins collection.');
+                    showToast('Not authorised as admin.', 'error');
                     return;
                 }
             }
@@ -406,8 +707,8 @@ const app = {
             this.render();
             this.updateLeaderboard();
             this.updateBracketCount();
-            alert('All data cleared!');
-        } catch (e) { alert('Error: ' + e.message); }
+            showToast('All data cleared!', 'success');
+        } catch (e) { showToast('Error: ' + e.message, 'error'); }
     },
 
     // ── Game flow helpers ───────────────────────────────────────
@@ -605,9 +906,9 @@ const app = {
             });
             this.actualResults = { ...this.bracket };
             this.updateLeaderboard();
-            alert(`${this.currentGender === 'men' ? "Men's" : "Women's"} results saved!`);
+            showToast('Results saved!', 'success');
         } catch (e) {
-            alert('Error saving results: ' + e.message);
+            showToast('Error saving results: ' + e.message, 'error');
         }
     },
 
@@ -620,9 +921,9 @@ const app = {
                 score,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
-            alert(`Final result for ${this.currentGender === 'men' ? "Men's" : "Women's"} set to: ${score || '?'}, ${technique || '?'}`);
+            showToast('Final technique saved!', 'success');
         } catch (e) {
-            alert('Error saving: ' + e.message);
+            showToast('Error saving: ' + e.message, 'error');
         }
     },
 
@@ -778,6 +1079,20 @@ const app = {
 
         // Populate country dropdown
         this._populateCountryDropdown();
+
+        // Calculate bracket similarity asynchronously
+        this._calcAndShowSimilarity();
+    },
+
+    async _calcAndShowSimilarity() {
+        const el = document.getElementById('bracketSimilarity');
+        if (!el) return;
+        try {
+            if (!this._oddsCache) await this._loadOdds();
+            if (!this._oddsCache) return;
+            const sim = this._calcBracketSimilarity(this.bracket, this._oddsCache);
+            if (sim !== null) el.textContent = sim + '%';
+        } catch (e) { /* ignore */ }
     },
 
     _populateCountryDropdown() {
@@ -1059,6 +1374,7 @@ const app = {
             } catch (e) { /* ignore */ }
             snap.forEach(doc => {
                 const data = doc.data();
+                if (!data.predictions) return;
                 let score = 0, correct = 0;
                 const roundCorrect = [0, 0, 0, 0, 0, 0];
                 for (let round = 0; round < 6; round++) {
@@ -1069,7 +1385,8 @@ const app = {
                     });
                 }
                 const techniqueBonus = actualTechnique && data.finalTechnique === actualTechnique ? 5 : 0;
-                score += techniqueBonus;
+                const perfectBonus = (correct === totalActual && totalActual > 0) ? 50 : 0;
+                score += techniqueBonus + correct + perfectBonus;
                 scores.push({ uid: doc.id, name: data.displayName || doc.id, score, correct, total: totalActual, location: data.location || '', techniqueBonus, timestamp: data.timestamp });
             });
             // Sort: total points desc (includes technique bonus), then earlier submission
@@ -1089,7 +1406,7 @@ const app = {
             this._lbPage = 0;
             this._renderLeaderboard();
         } catch (e) {
-            console.error('Error updating leaderboard:', e);
+            console.error('Error updating leaderboard:', e, e.stack);
             document.getElementById('leaderboardContent').innerHTML = '<p style="text-align:center;color:#f00;">Error loading leaderboard</p>';
         }
     },
@@ -1105,33 +1422,50 @@ const app = {
             if (!entry) return '<div class="lb-podium-item lb-podium-empty"></div>';
             const pos = i === 1 ? 1 : i === 0 ? 2 : 3;
             const isCenter = pos === 1;
-            return `<div class="lb-podium-item lb-podium-${pos}${isCenter ? ' lb-podium-center' : ''}">
+            return `<div class="lb-podium-item lb-podium-${pos}${isCenter ? ' lb-podium-center' : ''}" onclick="app.viewBracketFromLeaderboard('${UI.escapeHtml(entry.uid)}')" style="cursor:pointer;">
                 <div class="lb-podium-rank">${String(pos).padStart(2, '0')}</div>
                 ${isCenter ? '<div class="lb-podium-trophy">\ud83c\udfc6</div>' : ''}
                 <div class="lb-podium-name">${UI.escapeHtml(entry.name)}</div>
                 <div class="lb-podium-loc">${UI.escapeHtml(entry.location || '')}</div>
                 <div class="lb-podium-pts"><strong>${entry.score}</strong> <small>PTS</small></div>
+                <div class="lb-podium-view">VIEW BRACKET</div>
             </div>`;
         }).join('');
         const start = this._lbPage * this._lbPageSize;
         const pageEntries = scores.slice(start, start + this._lbPageSize);
         const hasMore = start + this._lbPageSize < scores.length;
+        const _fmtDate = (ts) => {
+            if (!ts) return '—';
+            const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        };
         const rowsHtml = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
             return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
                 <span class="lb-row-rank">${String(entry.rank).padStart(2, '0')}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
                 <span class="lb-row-correct">${entry.correct} / ${entry.total}</span>
+                <span class="lb-row-date">${_fmtDate(entry.timestamp)}</span>
                 <span class="lb-row-pts">${entry.score}</span>
             </div>`;
         }).join('');
+        // Pinned "You" row
+        const youEntry = uid ? scores.find(e => e.uid === uid) : null;
+        const youRowHtml = youEntry ? `<div class="lb-row lb-row-you">
+                <span class="lb-row-rank">#${youEntry.rank}</span>
+                <span class="lb-row-name">You (${UI.escapeHtml(youEntry.name)})${youEntry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(youEntry.location) + '</span>' : ''}</span>
+                <span class="lb-row-correct">${youEntry.correct} / ${youEntry.total}</span>
+                <span class="lb-row-date">${_fmtDate(youEntry.timestamp)}</span>
+                <span class="lb-row-pts">${youEntry.score}</span>
+            </div>` : '';
         const loadMoreHtml = hasMore
             ? '<div style="text-align:center;margin-top:16px"><button class="bracket-action-btn" onclick="app._lbLoadMore()">LOAD MORE RANKINGS</button></div>'
             : '';
         container.innerHTML = `
             <div class="lb-podium">${podiumHtml}</div>
+            ${youRowHtml}
             <div class="lb-table">
-                <div class="lb-table-header"><span>RANK</span><span>CONTENDER</span><span>CORRECT PICKS</span><span>TOTAL POINTS</span></div>
+                <div class="lb-table-header"><span>RANK</span><span>CONTENDER</span><span>CORRECT PICKS</span><span>SUBMITTED</span><span>TOTAL POINTS</span></div>
                 <div id="lbRows">${rowsHtml}</div>
             </div>
             ${loadMoreHtml}`;
@@ -1145,10 +1479,12 @@ const app = {
         const hasMore = start + this._lbPageSize < this._lbScores.length;
         const newRows = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
+            const _fmtD = (ts) => { if (!ts) return '\u2014'; const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
             return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
                 <span class="lb-row-rank">${String(entry.rank).padStart(2, '0')}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
                 <span class="lb-row-correct">${entry.correct} / ${entry.total}</span>
+                <span class="lb-row-date">${_fmtD(entry.timestamp)}</span>
                 <span class="lb-row-pts">${entry.score}</span>
             </div>`;
         }).join('');
@@ -1171,41 +1507,70 @@ const app = {
         document.getElementById('lbWomenTab')?.classList.toggle('active', this.currentGender === 'women');
         this.updateLeaderboard();
         document.getElementById('leaderboardModal').style.display = 'block';
+        this._startLeaderboardListener();
     },
 
     closeLeaderboard() {
         document.getElementById('leaderboardModal').style.display = 'none';
+        this._stopLeaderboardListener();
+    },
+
+    _lbUnsubscribe: null,
+
+    _startLeaderboardListener() {
+        this._stopLeaderboardListener();
+        const g = this._lbGender || this.currentGender;
+        this._lbUnsubscribe = db.collection('brackets-' + g).onSnapshot(() => {
+            if (document.getElementById('leaderboardModal')?.style.display === 'block') {
+                this.updateLeaderboard(g);
+            }
+        }, () => {});
+    },
+
+    _stopLeaderboardListener() {
+        if (this._lbUnsubscribe) {
+            this._lbUnsubscribe();
+            this._lbUnsubscribe = null;
+        }
+    },
+
+    viewBracketFromLeaderboard(uid) {
+        const lbGender = this._lbGender || this.currentGender;
+        this.closeLeaderboard();
+        if (lbGender !== this.currentGender) {
+            this.currentGender = lbGender;
+            this.players = lbGender === 'men' ? this.menPlayers : this.womenPlayers;
+            document.body.className = lbGender === 'women' ? 'women' : '';
+            document.getElementById('menBtn')?.classList.toggle('active', lbGender === 'men');
+            document.getElementById('womenBtn')?.classList.toggle('active', lbGender === 'women');
+        }
+        this._setActiveNav('navLeaderboard');
+        this.loadSpecificBracket(uid);
     },
 
     // ── View all brackets ───────────────────────────────────────
 
     async viewAllBrackets() {
         const bracketsList = document.getElementById('bracketsList');
+        const searchInput = document.getElementById('bracketSearch');
+        if (searchInput) searchInput.value = '';
         try {
             const snap = await db.collection('brackets-' + this.currentGender).get();
             if (snap.empty) {
-                bracketsList.innerHTML = '<p style="text-align:center;color:#666;">No brackets saved yet!</p>';
+                bracketsList.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:40px;">No brackets saved yet!</p>';
             } else {
-                let html = '';
+                this._allBracketItems = [];
                 snap.forEach(doc => {
                     const data = doc.data();
                     const uid = doc.id;
-                    const name = UI.escapeHtml(data.displayName || 'Anonymous');
-                    const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'Unknown date';
-                    html += `<div class="bracket-item" data-uid="${UI.escapeHtml(uid)}">
-                        <div class="bracket-info">
-                            <div class="bracket-name">${name}</div>
-                            <div class="bracket-date">Saved: ${UI.escapeHtml(date)}</div>
-                        </div>
-                        <button class="view-bracket-btn">View →</button>
-                    </div>`;
+                    const name = data.displayName || 'Anonymous';
+                    const location = data.location || '';
+                    const date = data.timestamp ? data.timestamp.toDate() : null;
+                    const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+                    this._allBracketItems.push({ uid, name, location, date, dateStr });
                 });
-                bracketsList.innerHTML = html;
-                document.querySelectorAll('.bracket-item').forEach(item => {
-                    item.addEventListener('click', () => {
-                        app.loadSpecificBracket(item.getAttribute('data-uid'));
-                    });
-                });
+                this._allBracketItems.sort((a, b) => (b.date || 0) - (a.date || 0));
+                this._renderBracketList(this._allBracketItems);
             }
         } catch (e) {
             bracketsList.innerHTML = '<p style="text-align:center;color:#f00;">Error loading brackets</p>';
@@ -1214,28 +1579,67 @@ const app = {
         document.getElementById('bracketsModal').style.display = 'block';
     },
 
+    _renderBracketList(items) {
+        const bracketsList = document.getElementById('bracketsList');
+        if (!items.length) {
+            bracketsList.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No matches found</p>';
+            return;
+        }
+        const isMe = (uid) => uid === this.currentUser?.uid;
+        bracketsList.innerHTML = items.map(item => `
+            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}')">
+                <div class="ab-info">
+                    <div class="ab-name-wrap">
+                        ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
+                        <span class="ab-name">${UI.escapeHtml(item.name)}</span>
+                    </div>
+                    ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
+                </div>
+                <div class="ab-meta">
+                    <div class="ab-date-wrap">
+                        <span class="ab-date-label">SUBMITTED</span>
+                        <span class="ab-date">${UI.escapeHtml(item.dateStr)}</span>
+                    </div>
+                    <span class="ab-view">VIEW DETAILS →</span>
+                </div>
+            </div>`).join('');
+    },
+
+    filterBrackets(query) {
+        if (!this._allBracketItems) return;
+        const q = query.toLowerCase().trim();
+        const filtered = q
+            ? this._allBracketItems.filter(item => item.name.toLowerCase().includes(q) || item.location.toLowerCase().includes(q))
+            : this._allBracketItems;
+        this._renderBracketList(filtered);
+    },
+
     async loadSpecificBracket(uid) {
         try {
             const doc = await db.collection('brackets-' + this.currentGender).doc(uid).get();
             if (doc.exists) {
                 const data = doc.data();
-                this.bracket = data.predictions;
+                this.bracket = data.predictions || {};
                 this._viewingBracketName = data.displayName || 'Anonymous';
                 this.viewingOtherBracket = (uid !== this.currentUser?.uid);
                 this.gameState = 'bracket-summary';
                 UI.showBackToMine(this.viewingOtherBracket);
+                await this.loadActualResults();
                 this.render();
                 this.closeModal();
+            } else {
+                showToast('Bracket not found.', 'error');
             }
         } catch (e) {
             console.error('Error loading bracket:', e);
-            alert('Error loading bracket');
+            showToast('Error loading bracket', 'error');
         }
     },
 
     viewMyBracket() {
         this.viewingOtherBracket = false;
         UI.showBackToMine(false);
+        this._setActiveNav('navMyBracket');
         if (this.userBracketData) {
             this.bracket = { ...this.userBracketData };
             this.gameState = this.isBracketComplete() ? 'bracket-summary' : 'picking';
@@ -1298,6 +1702,17 @@ const app = {
             const menData = this._aggregateStats(menSnap, this.menPlayers);
             const womenData = this._aggregateStats(womenSnap, this.womenPlayers);
 
+            // Load actual results for both genders
+            let menActualResults = null, womenActualResults = null;
+            try {
+                const [menResDoc, womenResDoc] = await Promise.all([
+                    db.collection('actualResults-men').doc('current').get(),
+                    db.collection('actualResults-women').doc('current').get()
+                ]);
+                if (menResDoc.exists) menActualResults = menResDoc.data().predictions || null;
+                if (womenResDoc.exists) womenActualResults = womenResDoc.data().predictions || null;
+            } catch (e) { /* ignore */ }
+
             let html = '';
 
             // Overview cards
@@ -1340,6 +1755,15 @@ const app = {
             html += this._buildPickPopularity("Men's Pick Popularity", menData.pickData, this.menPlayers);
             html += this._buildPickPopularity("Women's Pick Popularity", womenData.pickData, this.womenPlayers);
             html += `</div>`;
+
+            // Survival tracker
+            html += `<div class="stats-grid">`;
+            html += this._buildSurvivalTracker("Men's Survival", menSnap, 'men', menActualResults);
+            html += this._buildSurvivalTracker("Women's Survival", womenSnap, 'women', womenActualResults);
+            html += `</div>`;
+
+            // Achievement badges
+            html += this._buildAchievements(menSnap, womenSnap, menActualResults, womenActualResults);
 
             content.innerHTML = html;
 
@@ -1548,13 +1972,16 @@ const app = {
             sortedMatches.forEach(([m, picks]) => {
                 const sorted = Object.entries(picks).sort((a, b) => b[1] - a[1]);
                 const total = sorted.reduce((s, [, c]) => s + c, 0);
-                const pickHtml = sorted.map(([pid, count]) => {
+                const maxPct = total > 0 ? Math.round((sorted[0][1] / total) * 100) : 0;
+                const pickHtml = sorted.map(([pid, count], idx) => {
                     const player = players.find(p => p.id === Number(pid));
                     const name = player ? player.name : 'Unknown';
                     const pct = Math.round((count / total) * 100);
+                    const barClass = idx === 0 ? 'popularity-bar-top' : 'popularity-bar-other';
+                    const barWidth = Math.max(pct, 2);
                     return `<div class="popularity-bar-row">
                         <span class="popularity-name">${UI.escapeHtml(name)}</span>
-                        <div class="popularity-bar-bg"><div class="popularity-bar-fill" style="width:${pct}%"></div></div>
+                        <div class="popularity-bar-bg"><div class="popularity-bar-fill ${barClass}" style="width:${barWidth}%"></div></div>
                         <span class="popularity-pct">${pct}%</span>
                     </div>`;
                 }).join('');
@@ -1570,6 +1997,232 @@ const app = {
 
     closeStatsModal() {
         document.getElementById('statsModal').style.display = 'none';
+    },
+
+    // ── Bracket Similarity ──────────────────────────────────────
+
+    _calcBracketSimilarity(userBracket, pickData) {
+        if (!pickData || !userBracket) return null;
+        let matches = 0, agrees = 0;
+        for (let r = 0; r < 6; r++) {
+            if (!pickData[r]) continue;
+            Object.entries(pickData[r]).forEach(([m, picks]) => {
+                const userPick = userBracket[r]?.[m];
+                if (!userPick) return;
+                matches++;
+                const sorted = Object.entries(picks).sort((a, b) => b[1] - a[1]);
+                if (sorted.length > 0 && Number(sorted[0][0]) === userPick) agrees++;
+            });
+        }
+        return matches > 0 ? Math.round((agrees / matches) * 100) : null;
+    },
+
+    // ── Survival Tracker ────────────────────────────────────────
+
+    _buildSurvivalTracker(title, snap, gender, actualResults) {
+        let champAlive = 0, perfectPath = 0, totalBrackets = 0;
+
+        if (!actualResults) {
+            return `<div class="stat-section"><h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
+                <p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">Results not entered yet</p></div>`;
+        }
+
+        const totalActual = Object.values(actualResults).reduce((s, r) => s + Object.keys(r).length, 0);
+        if (totalActual === 0) {
+            return `<div class="stat-section"><h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
+                <p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">Results not entered yet</p></div>`;
+        }
+
+        // Find actual champion (if finals result exists)
+        const actualChampion = actualResults[5]?.[0] || null;
+
+        snap.forEach(doc => {
+            const preds = doc.data().predictions;
+            if (!preds) return;
+            totalBrackets++;
+
+            // Check if their champion is still alive
+            const userChampion = preds[5]?.[0];
+            if (userChampion && actualChampion) {
+                if (userChampion === actualChampion) champAlive++;
+            } else if (userChampion) {
+                // Check if user's champion hasn't been eliminated yet
+                let eliminated = false;
+                for (let r = 0; r < 6; r++) {
+                    const actual = actualResults[r] || {};
+                    Object.entries(actual).forEach(([m, winnerId]) => {
+                        const matchIdx = Number(m);
+                        // Check if this player was in this match and lost
+                        if (r === 0) {
+                            const players = gender === 'men' ? this.menPlayers : this.womenPlayers;
+                            const p1 = players[matchIdx * 2]?.id;
+                            const p2 = players[matchIdx * 2 + 1]?.id;
+                            if ((userChampion === p1 || userChampion === p2) && winnerId !== userChampion) eliminated = true;
+                        }
+                    });
+                }
+                if (!eliminated) champAlive++;
+            }
+
+            // Check perfect path
+            let perfect = true;
+            for (let r = 0; r < 6; r++) {
+                const actual = actualResults[r] || {};
+                const picks = preds[r] || {};
+                Object.keys(actual).forEach(m => {
+                    if (picks[m] !== actual[m]) perfect = false;
+                });
+            }
+            if (perfect && totalActual > 0) perfectPath++;
+        });
+
+        return `<div class="stat-section">
+            <h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
+            <div style="display:flex;gap:16px;justify-content:center;">
+                <div style="text-align:center;">
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:2em;color:var(--kendo-gold);">${champAlive}</div>
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:0.65em;letter-spacing:2px;color:rgba(255,255,255,0.35);">CHAMPION ALIVE</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:2em;color:var(--kendo-gold);">${perfectPath}</div>
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:0.65em;letter-spacing:2px;color:rgba(255,255,255,0.35);">PERFECT PATH</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:2em;color:white;">${totalBrackets}</div>
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:0.65em;letter-spacing:2px;color:rgba(255,255,255,0.35);">TOTAL BRACKETS</div>
+                </div>
+            </div>
+        </div>`;
+    },
+
+    // ── Achievement Badges ──────────────────────────────────────
+
+    _buildAchievements(menSnap, womenSnap, menActualResults, womenActualResults) {
+        const allDocs = [];
+        menSnap.forEach(doc => allDocs.push({ ...doc.data(), uid: doc.id, gender: 'men' }));
+        womenSnap.forEach(doc => allDocs.push({ ...doc.data(), uid: doc.id, gender: 'women' }));
+
+        if (allDocs.length === 0) return '';
+
+        // Early Bird: first 10 submissions by timestamp
+        const withTime = allDocs.filter(d => d.timestamp).sort((a, b) => {
+            const at = a.timestamp.seconds || 0;
+            const bt = b.timestamp.seconds || 0;
+            return at - bt;
+        });
+        const earlyBirds = withTime.slice(0, Math.min(10, withTime.length)).map(d => d.displayName || 'Anonymous');
+
+        // Contrarian: bracket most different from crowd consensus
+        // Build consensus per gender
+        let maxDiff = 0, contrarianName = '';
+        ['men', 'women'].forEach(gender => {
+            const genderDocs = allDocs.filter(d => d.gender === gender && d.predictions);
+            if (genderDocs.length < 2) return;
+            // Build consensus
+            const consensus = {};
+            genderDocs.forEach(d => {
+                for (let r = 0; r < 6; r++) {
+                    if (!d.predictions[r]) continue;
+                    if (!consensus[r]) consensus[r] = {};
+                    Object.entries(d.predictions[r]).forEach(([m, pid]) => {
+                        if (!consensus[r][m]) consensus[r][m] = {};
+                        consensus[r][m][pid] = (consensus[r][m][pid] || 0) + 1;
+                    });
+                }
+            });
+            // Find most popular per matchup
+            const popular = {};
+            Object.entries(consensus).forEach(([r, matches]) => {
+                popular[r] = {};
+                Object.entries(matches).forEach(([m, picks]) => {
+                    const top = Object.entries(picks).sort((a, b) => b[1] - a[1])[0];
+                    if (top) popular[r][m] = Number(top[0]);
+                });
+            });
+            // Score each bracket
+            genderDocs.forEach(d => {
+                let differ = 0, total = 0;
+                for (let r = 0; r < 6; r++) {
+                    if (!popular[r] || !d.predictions[r]) continue;
+                    Object.entries(popular[r]).forEach(([m, popPick]) => {
+                        total++;
+                        if (d.predictions[r][m] !== popPick) differ++;
+                    });
+                }
+                if (total > 0 && differ > maxDiff) {
+                    maxDiff = differ;
+                    contrarianName = d.displayName || 'Anonymous';
+                }
+            });
+        });
+
+        // Kendo Scholar: highest accuracy in rounds 3-5 (R16, QF, SF, Finals)
+        let scholarName = '', scholarPct = 0;
+        [{ gender: 'men', results: menActualResults }, { gender: 'women', results: womenActualResults }].forEach(({ gender, results: actualResults }) => {
+            if (!actualResults) return;
+            const genderDocs = allDocs.filter(d => d.gender === gender && d.predictions);
+            genderDocs.forEach(d => {
+                let correct = 0, total = 0;
+                for (let r = 2; r < 6; r++) {
+                    const actual = actualResults[r] || {};
+                    const picks = d.predictions[r] || {};
+                    Object.keys(actual).forEach(m => {
+                        total++;
+                        if (picks[m] === actual[m]) correct++;
+                    });
+                }
+                const pct = total > 0 ? correct / total : 0;
+                if (pct > scholarPct) {
+                    scholarPct = pct;
+                    scholarName = d.displayName || 'Anonymous';
+                }
+            });
+        });
+
+        let html = `<div class="stat-section" style="margin-top:20px;">
+            <h3 class="stat-section-title">ACHIEVEMENT BADGES</h3>
+            <div class="badge-grid">`;
+
+        // Early Bird
+        html += `<div class="badge-card">
+            <div class="badge-icon">🐦</div>
+            <div class="badge-title">EARLY BIRD</div>
+            <div class="badge-desc">First ${earlyBirds.length} to submit</div>
+            <div class="badge-names">${earlyBirds.map(n => UI.escapeHtml(n)).join(', ')}</div>
+        </div>`;
+
+        // Contrarian
+        if (contrarianName) {
+            html += `<div class="badge-card">
+                <div class="badge-icon">🎭</div>
+                <div class="badge-title">CONTRARIAN</div>
+                <div class="badge-desc">Most unique picks</div>
+                <div class="badge-names">${UI.escapeHtml(contrarianName)}</div>
+            </div>`;
+        }
+
+        // Kendo Scholar
+        if (scholarName && scholarPct > 0) {
+            html += `<div class="badge-card">
+                <div class="badge-icon">🎓</div>
+                <div class="badge-title">KENDO SCHOLAR</div>
+                <div class="badge-desc">Best late-round accuracy (${Math.round(scholarPct * 100)}%)</div>
+                <div class="badge-names">${UI.escapeHtml(scholarName)}</div>
+            </div>`;
+        }
+
+        html += `</div></div>`;
+        return html;
+    },
+
+    // ── Scoring Rules ───────────────────────────────────────────
+
+    showScoringRules() {
+        document.getElementById('scoringRulesModal').style.display = 'block';
+    },
+
+    closeScoringRules() {
+        document.getElementById('scoringRulesModal').style.display = 'none';
     },
 
     // ── Odds toggle ───────────────────────────────────────────
@@ -1608,7 +2261,16 @@ const app = {
 
 auth.onAuthStateChanged(user => app.onAuth(user));
 app.ensureAnonymousAuth();
+app.completeEmailSignIn();
 app.init();
+
+// Warn before closing tab if unsaved picks
+window.addEventListener('beforeunload', (e) => {
+    if (app.hasAnyPicks() && !app.userBracketData) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
 
 window.addEventListener('click', event => {
     if (event.target === document.getElementById('bracketsModal')) {
@@ -1619,6 +2281,12 @@ window.addEventListener('click', event => {
     }
     if (event.target === document.getElementById('leaderboardModal')) {
         app.closeLeaderboard();
+    }
+    if (event.target === document.getElementById('signInModal')) {
+        app.closeSignInModal();
+    }
+    if (event.target === document.getElementById('scoringRulesModal')) {
+        app.closeScoringRules();
     }
     // Close menu when clicking outside
     const menu = document.getElementById('menuDropdown');
