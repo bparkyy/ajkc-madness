@@ -132,8 +132,13 @@
 
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
             <span id="modeText"></span>
+            <select id="adminGenderSelect" onchange="app.switchAdminGender(this.value)" style="margin-left:10px;padding:4px 8px;background:var(--surface-2);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:4px;font-weight:600;">
+                <option value="men">MEN'S</option>
+                <option value="women">WOMEN'S</option>
+            </select>
             <button onclick="app.saveAdminResults()" style="margin-left: 10px;">Save Results</button>
-            <button class="danger" onclick="app.clearAll()" style="margin-left: 10px;">Clear All Data</button>
+            <button class="danger" onclick="app.clearActualResults()" style="margin-left: 10px;">Clear Actual Results</button>
+            <button class="danger" onclick="app.clearUserData()" style="margin-left: 10px;">Clear User Data</button>
             <button onclick="app.toggleLock()" style="margin-left: 10px;" id="lockBtn">Lock Submissions</button>
             <span style="margin-left:16px;">Final Ippon:</span>
             <select id="adminTechnique" style="margin-left:4px;padding:4px 8px;background:var(--surface-2);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:4px;">

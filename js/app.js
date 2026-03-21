@@ -370,14 +370,22 @@ const app = {
         titleEl.textContent = title;
         const subtitleEl = document.createElement('div');
         subtitleEl.className = 'screenshot-title';
-        subtitleEl.style.cssText = "font-family:'Lexend',sans-serif;font-size:0.7em;color:rgba(255,255,255,0.3);text-align:center;margin-bottom:12px;letter-spacing:1px;";
+        subtitleEl.style.cssText = "font-family:'Lexend',sans-serif;font-size:0.7em;color:rgba(255,255,255,0.3);text-align:center;margin-bottom:4px;letter-spacing:1px;";
         subtitleEl.textContent = 'AJKC MADNESS — Bracket Challenge 2026';
+        const championName = this._getChampionName();
+        const championEl = document.createElement('div');
+        championEl.className = 'screenshot-title';
+        championEl.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:1.1em;color:white;text-align:center;margin-bottom:12px;letter-spacing:2px;";
+        championEl.innerHTML = championName
+            ? 'PREDICTED CHAMPION: <span style="color:#d4a843;">' + UI.escapeHtml(championName) + '</span>'
+            : '';
         const footerEl = document.createElement('div');
         footerEl.className = 'screenshot-title';
         footerEl.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:0.8em;color:rgba(255,255,255,0.2);text-align:center;margin-top:12px;padding-bottom:8px;letter-spacing:2px;";
         footerEl.textContent = 'ajkcmadness.com';
 
         // Insert title at top, footer at bottom
+        bracketArea.insertBefore(championEl, bracketArea.firstChild);
         bracketArea.insertBefore(subtitleEl, bracketArea.firstChild);
         bracketArea.insertBefore(titleEl, bracketArea.firstChild);
         bracketArea.appendChild(footerEl);
@@ -385,13 +393,26 @@ const app = {
         // Temporarily expand wrapper to full natural size for capture
         const wrapperOldHeight = bracketArea.style.height;
         const wrapperOldOverflow = bracketArea.style.overflow;
+        const wrapperOldWidth = bracketArea.style.width;
+        const wrapperOldMaxWidth = bracketArea.style.maxWidth;
+        const wrapperOldMinWidth = bracketArea.style.minWidth;
         bracketArea.style.height = 'auto';
         bracketArea.style.overflow = 'visible';
+        // Expand wrapper to bracket's natural width so capture isn't clipped
+        const bracket = bracketArea.querySelector('.ncaa-bracket');
+        if (bracket) {
+            const naturalW = bracket.scrollWidth + 32;
+            bracketArea.style.width = naturalW + 'px';
+            bracketArea.style.minWidth = naturalW + 'px';
+            bracketArea.style.maxWidth = naturalW + 'px';
+        }
 
         // Redraw SVG lines at full unscaled size
         this.drawBracketSVG();
 
         try {
+            const captureW = bracketArea.scrollWidth;
+            const captureH = bracketArea.scrollHeight;
             const canvas = await html2canvas(bracketArea, {
                 backgroundColor: '#0d1017',
                 scale: 2,
@@ -399,8 +420,9 @@ const app = {
                 logging: false,
                 scrollX: 0,
                 scrollY: -window.scrollY,
-                width: bracketArea.scrollWidth,
-                height: bracketArea.scrollHeight
+                width: captureW,
+                height: captureH,
+                windowWidth: captureW
             });
 
             canvas.toBlob(blob => {
@@ -420,6 +442,9 @@ const app = {
             document.querySelectorAll('.screenshot-title').forEach(el => el.remove());
             bracketArea.style.height = wrapperOldHeight;
             bracketArea.style.overflow = wrapperOldOverflow;
+            bracketArea.style.width = wrapperOldWidth;
+            bracketArea.style.minWidth = wrapperOldMinWidth;
+            bracketArea.style.maxWidth = wrapperOldMaxWidth;
             this._resetBracketScale();
             this.drawBracketSVG();
             this._scaleBracketToFit();
@@ -704,10 +729,53 @@ const app = {
             indicator.style.display = 'flex';
             indicator.style.justifyContent = 'center';
             indicator.style.alignItems = 'center';
+            const genderSelect = document.getElementById('adminGenderSelect');
+            if (genderSelect) genderSelect.value = this.currentGender;
         } else {
             indicator.style.display = 'none';
         }
         this.render();
+    },
+
+    async clearActualResults() {
+        const gender = this.currentGender;
+        const label = gender === 'men' ? "men's" : "women's";
+        if (!confirm(`Clear actual results for the ${label} bracket? This won't delete user brackets.`)) return;
+        try {
+            await db.collection('actualResults-' + gender).doc('current').delete();
+            this.actualResults = null;
+            this.bracket = {};
+            this.render();
+            showToast(`Actual ${label} results cleared!`, 'success');
+        } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    },
+
+    async switchAdminGender(gender) {
+        this.currentGender = gender;
+        this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
+        document.body.className = gender === 'women' ? 'women' : '';
+        try {
+            const doc = await db.collection('actualResults-' + gender).doc('current').get();
+            this.bracket = doc.exists ? (doc.data().predictions || {}) : {};
+        } catch { this.bracket = {}; }
+        await this.loadActualResults();
+        this.render();
+    },
+
+    async clearUserData() {
+        const gender = this.currentGender;
+        const label = gender === 'men' ? "men's" : "women's";
+        if (!confirm(`Clear all user bracket submissions for the ${label} bracket? This won't delete actual results.`)) return;
+        try {
+            const snap = await db.collection('brackets-' + gender).get();
+            const promises = [];
+            snap.forEach(doc => promises.push(doc.ref.delete()));
+            await Promise.all(promises);
+            this.userBracketData = null;
+            this.updateLeaderboard();
+            this.updateBracketCount();
+            showToast(`All ${label} user brackets cleared!`, 'success');
+        } catch (e) { showToast('Error: ' + e.message, 'error'); }
     },
 
     async clearAll() {
