@@ -32,7 +32,11 @@ const UI = {
             const finalsCardClass = isFinals ? ' finals-card' : '';
             const rankStr = String(player.rank);
             const rankLabel = rankStr.startsWith('R') ? `${rankStr.slice(1)} Dan Renshi` : `${rankStr} Dan`;
+            const imgHtml = player.img
+                ? `<div class="card-avatar"><img src="${this.escapeHtml(player.img)}" alt="" loading="lazy"></div>`
+                : `<div class="card-avatar card-avatar-fallback">${this.escapeHtml(player.name.charAt(0))}</div>`;
             return `<div class="player-card${picked ? ' picked' : ''}${finalsCardClass}" onclick="app.pickWinner(${roundIndex}, ${matchIndex}, ${player.id})">
+                ${imgHtml}
                 <span class="card-prefecture">${this.escapeHtml(player.prefecture)}</span>
                 <span class="card-name">${this.escapeHtml(player.name)}</span>
                 ${player.nameJp ? `<span class="card-name-jp">${this.escapeHtml(player.nameJp)}</span>` : ''}
@@ -189,7 +193,6 @@ const UI = {
         // Action buttons
         const actionBtns = !isReadonly
             ? `<div class="bracket-action-btns">
-                <button class="bracket-action-btn" onclick="app.saveBracket()">SUBMIT PREDICTIONS</button>
                 <button class="bracket-action-btn bracket-action-gold" onclick="app.startEditing()">EDIT PICKS</button>
                 <button class="bracket-action-btn" onclick="app.shareBracket()">DOWNLOAD BRACKET</button>
             </div>`
@@ -210,40 +213,13 @@ const UI = {
             ? '<div style="text-align:center;margin-bottom:20px"><button class="bracket-action-btn" onclick="app.resumePicking()">▶️ Resume Picking</button></div>'
             : '';
 
-        // Name + location + technique (only for own bracket)
-        const savedTechnique = document.getElementById('userTechnique')?.value || '';
-        const nameHtml = !isReadonly
-            ? `<div class="bracket-name-row">
-                <div class="bracket-name-field">
-                    <label class="submit-name-label" for="submitName">Name / お名前</label>
-                    <input type="text" id="submitName" class="submit-name-input" placeholder="Enter your name" maxlength="30" value="${this.escapeHtml(app.currentUser?.displayName || document.getElementById('userName')?.value || '')}" />
-                </div>
-                <div class="bracket-name-field">
-                    <label class="submit-name-label" for="submitLocation">Country / 出身地 <span style="opacity:0.5">(optional)</span></label>
-                    <select id="submitLocation" class="submit-name-input"><option value="">Select country...</option></select>
-                </div>
-                <div class="bracket-name-field">
-                    <label class="submit-name-label" for="submitTechnique">Final winning ippon <span style="opacity:0.5">(bonus)</span></label>
-                    <select id="submitTechnique" class="submit-name-input">
-                        <option value="">Select ippon...</option>
-                        <option value="men"${savedTechnique === 'men' ? ' selected' : ''}>Men (メ)</option>
-                        <option value="kote"${savedTechnique === 'kote' ? ' selected' : ''}>Kote (コ)</option>
-                        <option value="dou"${savedTechnique === 'dou' ? ' selected' : ''}>Dou (ド)</option>
-                        <option value="tsuki"${savedTechnique === 'tsuki' ? ' selected' : ''}>Tsuki (ツ)</option>
-                        <option value="hansoku"${savedTechnique === 'hansoku' ? ' selected' : ''}>Hansoku (ハンソク)</option>
-                    </select>
-                </div>
-            </div>`
-            : '';
+        const nameHtml = '';
 
         const bracketVisualHtml = `<div class="bracket-tree-wrapper">
                 <div class="bracket-visual-area" id="bracketVisualArea"></div>
             </div>`;
 
-        // Save reminder
-        const reminderHtml = !isReadonly
-            ? '<p class="save-reminder">⚠️ You must submit your bracket to save any changes</p>'
-            : '';
+        const reminderHtml = '';
 
         return `
             <div class="bracket-summary">

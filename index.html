@@ -108,10 +108,10 @@
             <nav class="app-nav">
                 <button class="nav-link active" id="navMyBracket" onclick="app.viewMyBracket()">MY BRACKET</button>
                 <button class="nav-link" id="navLeaderboard" onclick="app.showLeaderboard()">LEADERBOARD</button>
-                <button class="nav-link" onclick="app.showStats()">STATS</button>
+                <button class="nav-link" id="navStats" onclick="app.showStats()">STATS</button>
                 <button class="nav-link" onclick="app.showScoringRules()">RULES</button>
-                <button class="nav-link" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
-                <button class="nav-link nav-donate" onclick="app.showDonateModal()">DONATE</button>
+                <button class="nav-link" id="navAllBrackets" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
+                <button class="nav-link nav-donate" id="navDonate" onclick="app.showDonateModal()">DONATE</button>
             </nav>
             <div class="app-header-right">
                 <button id="backToMineBtn" class="back-to-mine-btn" style="display: none;" onclick="app.viewMyBracket()">↩</button>
@@ -188,27 +188,6 @@
             <span>ajkcmadness.com</span>
         </div>
     </footer>
-
-    <!-- Donate modal -->
-    <div id="donateModal" class="modal">
-        <div class="modal-content" style="max-width:480px;">
-            <div class="modal-header">
-                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">SUPPORT AJKC MADNESS</h2>
-                <span class="close" onclick="app.closeDonateModal()">&times;</span>
-            </div>
-            <div style="padding:8px 0 20px;">
-                <p style="color:rgba(255,255,255,0.5);font-size:0.85em;line-height:1.6;margin-bottom:20px;text-align:center;">
-                    Help us keep this bracket challenge running and give back to the kendo community. Every contribution goes toward hosting, development, and future tournaments.
-                </p>
-                <div class="donate-options">
-                    <a href="https://paypal.me/BettyPark259" class="donate-btn" target="_blank" rel="noopener">DONATE VIA PAYPAL</a>
-                    <a href="https://venmo.com/bparkyy" class="donate-btn donate-btn-gold" target="_blank" rel="noopener">DONATE VIA VENMO</a>                </div>
-                <p style="color:rgba(255,255,255,0.25);font-size:0.7em;text-align:center;margin-top:16px;">
-                    Thank you for your support!
-                </p>
-            </div>
-        </div>
-    </div>
 
     <!-- Scoring Rules modal -->
     <div id="scoringRulesModal" class="modal">

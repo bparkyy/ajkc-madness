@@ -583,7 +583,10 @@ const app = {
             }
             this.viewingOtherBracket = false;
             UI.showBackToMine(false);
-            this.render();
+            // Only render if the main app is visible (not on landing page)
+            if (document.getElementById('mainApp').style.display !== 'none') {
+                this.render();
+            }
         } catch (e) { console.error('Error loading user bracket:', e); }
     },
 
@@ -799,9 +802,10 @@ const app = {
         // Confetti on champion pick
         if (round === 5) {
             this.fireConfetti();
+            return; // Don't auto-advance — let user press Next
         }
 
-        this._advanceTimeout = setTimeout(() => this.nextMatch(), round === 5 ? 1500 : 400);
+        this._advanceTimeout = setTimeout(() => this.nextMatch(), 400);
     },
 
     fireConfetti() {
@@ -832,7 +836,12 @@ const app = {
             if (this.gameRound < 5) {
                 this.gameState = 'round-summary';
             } else {
-                this.gameState = 'bracket-summary';
+                // Finals complete — enter post-finals transition flow
+                if (this.currentUser && !this.currentUser.isAnonymous) {
+                    this.gameState = 'post-finals-submit';
+                } else {
+                    this.gameState = 'post-finals-login';
+                }
             }
         } else {
             // Round not complete (cascade cleared some picks) — jump to first gap
@@ -890,6 +899,161 @@ const app = {
             </div>`;
 
         setTimeout(callback, 1800);
+    },
+
+    // ── Post-finals transition screens ───────────────────────────
+
+    renderPostFinalsLogin() {
+        const container = document.getElementById('gameContainer');
+        container.innerHTML = `
+            <div class="pf-screen">
+                <div class="pf-icon">🎉</div>
+                <h1 class="pf-title">BRACKET COMPLETE!</h1>
+                <p class="pf-subtitle">Sign in to save your bracket and compete on the leaderboard.</p>
+                <div class="pf-login-options">
+                    <button class="pf-btn pf-btn-google" onclick="app._postFinalsGoogleLogin()">
+                        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                        SIGN IN WITH GOOGLE
+                    </button>
+                    <button class="pf-btn pf-btn-skip" onclick="app._postFinalsSkipLogin()">CONTINUE WITHOUT SIGNING IN</button>
+                </div>
+            </div>`;
+    },
+
+    async _postFinalsGoogleLogin() {
+        const ok = await this.signInWithGoogle();
+        if (ok) {
+            this.gameState = 'post-finals-submit';
+            this.render();
+        }
+    },
+
+    _postFinalsSkipLogin() {
+        this.gameState = 'post-finals-submit';
+        this.render();
+    },
+
+    renderPostFinalsSubmit() {
+        const container = document.getElementById('gameContainer');
+        const savedName = this.currentUser?.displayName || document.getElementById('userName')?.value || '';
+        const savedLocation = document.getElementById('userLocation')?.value || '';
+        const savedTechnique = document.getElementById('userTechnique')?.value || '';
+
+        container.innerHTML = `
+            <div class="pf-screen">
+                <div class="pf-icon">📋</div>
+                <h1 class="pf-title">SUBMIT YOUR BRACKET</h1>
+                <p class="pf-subtitle">Almost there! Fill in your details to lock in your predictions.</p>
+                <div class="pf-form">
+                    <div class="pf-field">
+                        <label class="pf-label" for="pfName">Name / お名前</label>
+                        <input type="text" id="pfName" class="pf-input" placeholder="Enter your name" maxlength="30" value="${UI.escapeHtml(savedName)}" />
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="pfLocation">Country / 出身地 <span style="opacity:0.5">(optional)</span></label>
+                        <select id="pfLocation" class="pf-input"><option value="">Select country...</option></select>
+                    </div>
+                    <div class="pf-field">
+                        <label class="pf-label" for="pfTechnique">Final winning ippon <span style="opacity:0.5">(bonus +5 pts)</span></label>
+                        <select id="pfTechnique" class="pf-input">
+                            <option value="">Select ippon...</option>
+                            <option value="men"${savedTechnique === 'men' ? ' selected' : ''}>Men (メ)</option>
+                            <option value="kote"${savedTechnique === 'kote' ? ' selected' : ''}>Kote (コ)</option>
+                            <option value="dou"${savedTechnique === 'dou' ? ' selected' : ''}>Dou (ド)</option>
+                            <option value="tsuki"${savedTechnique === 'tsuki' ? ' selected' : ''}>Tsuki (ツ)</option>
+                            <option value="hansoku"${savedTechnique === 'hansoku' ? ' selected' : ''}>Hansoku (ハンソク)</option>
+                        </select>
+                    </div>
+                    <button class="pf-btn pf-btn-submit" onclick="app._postFinalsSubmit()">SUBMIT BRACKET</button>
+                </div>
+            </div>`;
+
+        // Populate country dropdown
+        const sel = document.getElementById('pfLocation');
+        const countries = [
+            'Argentina', 'Australia', 'Austria', 'Belgium', 'Brazil',
+            'Canada', 'Chile', 'China', 'Colombia', 'Croatia',
+            'Czech Republic', 'Denmark', 'Finland', 'France', 'Germany',
+            'Hong Kong', 'Hungary', 'Iceland', 'India', 'Indonesia',
+            'Ireland', 'Israel', 'Italy', 'Japan', 'Luxembourg',
+            'Malaysia', 'Mexico', 'Netherlands', 'New Zealand', 'Norway',
+            'Peru', 'Philippines', 'Poland', 'Portugal', 'Romania',
+            'Russia', 'Scotland', 'Serbia', 'Singapore', 'South Africa',
+            'South Korea', 'Spain', 'Sweden', 'Switzerland', 'Taiwan',
+            'Thailand', 'United Kingdom', 'United States', 'Other'
+        ];
+        countries.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            if (c === savedLocation) opt.selected = true;
+            sel.appendChild(opt);
+        });
+    },
+
+    _postFinalsSubmit() {
+        if (!this.currentUser) {
+            showToast('Something went wrong — please refresh.', 'error');
+            return;
+        }
+        const displayName = document.getElementById('pfName')?.value.trim() || '';
+        const location = document.getElementById('pfLocation')?.value.trim() || '';
+        const finalTechnique = document.getElementById('pfTechnique')?.value || '';
+        if (!displayName) {
+            showToast('Please enter your name!', 'error');
+            document.getElementById('pfName')?.focus();
+            return;
+        }
+        if (this.isLocked && !this.adminMode) {
+            showToast('Tournament is locked!', 'error');
+            return;
+        }
+
+        // Save to hidden inputs so bracket summary has them
+        const userNameEl = document.getElementById('userName');
+        if (userNameEl) userNameEl.value = displayName;
+        const userLocEl = document.getElementById('userLocation');
+        if (userLocEl) userLocEl.value = location;
+        const userTechEl = document.getElementById('userTechnique');
+        if (userTechEl) userTechEl.value = finalTechnique;
+
+        db.collection('brackets-' + this.currentGender).doc(this.currentUser.uid).set({
+            displayName,
+            location,
+            finalTechnique,
+            predictions: this.bracket,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+            this.userBracketData = { ...this.bracket };
+            this.updateBracketCount();
+            this.promptAccountUpgrade();
+            this.gameState = 'post-finals-thanks';
+            this.render();
+        }).catch(e => showToast('Error saving bracket: ' + e.message, 'error'));
+    },
+
+    renderPostFinalsThanks() {
+        const container = document.getElementById('gameContainer');
+        const champion = this._getChampionName();
+        container.innerHTML = `
+            <div class="pf-screen pf-thanks">
+                <div class="pf-icon">🏆</div>
+                <h1 class="pf-title">THANKS FOR PLAYING!</h1>
+                <p class="pf-subtitle">Your bracket has been submitted. ${champion ? 'Your champion pick: <strong>' + UI.escapeHtml(champion) + '</strong>' : ''}</p>
+                <p class="pf-subtitle" style="margin-top:8px;opacity:0.5;">Good luck and may the best bracket win!</p>
+                <div class="pf-thanks-btns">
+                    <button class="pf-btn pf-btn-primary" onclick="app.showBracketSummary()">VIEW MY BRACKET</button>
+                    <button class="pf-btn pf-btn-gold" onclick="app.showDonateModal()">SUPPORT AJKCMADNESS</button>
+                </div>
+            </div>`;
+    },
+
+    _getChampionName() {
+        const winnerId = this.bracket[5]?.[0];
+        if (!winnerId) return null;
+        const players = this.currentGender === 'men' ? this.menPlayers : this.womenPlayers;
+        const p = players.find(pl => pl.id === winnerId);
+        return p ? p.name : null;
     },
 
     showBracketSummary() {
@@ -997,6 +1161,7 @@ const app = {
         if (this.currentView === 'stats') { this.renderStatsPage(); return; }
         if (this.currentView === 'allBrackets') { this.renderAllBracketsPage(); return; }
         if (this.currentView === 'legal') { this.renderLegalPage(); return; }
+        if (this.currentView === 'donate') { this.renderDonatePage(); return; }
 
         // Set round intensity on body for progressive atmosphere
         if (this.gameState === 'picking') {
@@ -1006,9 +1171,12 @@ const app = {
         }
 
         switch (this.gameState) {
-            case 'picking':      this.renderCardView(); break;
-            case 'round-summary': this.renderRoundSummaryView(); break;
-            default:              this.renderBracketSummaryView(); break;
+            case 'picking':            this.renderCardView(); break;
+            case 'round-summary':      this.renderRoundSummaryView(); break;
+            case 'post-finals-login':  this.renderPostFinalsLogin(); break;
+            case 'post-finals-submit': this.renderPostFinalsSubmit(); break;
+            case 'post-finals-thanks': this.renderPostFinalsThanks(); break;
+            default:                   this.renderBracketSummaryView(); break;
         }
     },
 
@@ -1134,16 +1302,16 @@ const app = {
         if (!sel || sel.tagName !== 'SELECT') return;
         const saved = document.getElementById('userLocation')?.value || '';
         const countries = [
-            'Japan', 'United States', 'Canada', 'United Kingdom', 'Australia',
-            'France', 'Germany', 'South Korea', 'Brazil', 'Netherlands',
-            'Sweden', 'Italy', 'Belgium', 'Hungary', 'Switzerland',
-            'New Zealand', 'Mexico', 'Spain', 'Poland', 'Czech Republic',
-            'Austria', 'Norway', 'Denmark', 'Finland', 'Argentina',
-            'China', 'Taiwan', 'Hong Kong', 'Singapore', 'Malaysia',
-            'Thailand', 'Indonesia', 'Philippines', 'India', 'Russia',
-            'Portugal', 'Ireland', 'Scotland', 'Romania', 'Serbia',
-            'Croatia', 'South Africa', 'Colombia', 'Chile', 'Peru',
-            'Israel', 'Luxembourg', 'Iceland', 'Other'
+            'Argentina', 'Australia', 'Austria', 'Belgium', 'Brazil',
+            'Canada', 'Chile', 'China', 'Colombia', 'Croatia',
+            'Czech Republic', 'Denmark', 'Finland', 'France', 'Germany',
+            'Hong Kong', 'Hungary', 'Iceland', 'India', 'Indonesia',
+            'Ireland', 'Israel', 'Italy', 'Japan', 'Luxembourg',
+            'Malaysia', 'Mexico', 'Netherlands', 'New Zealand', 'Norway',
+            'Peru', 'Philippines', 'Poland', 'Portugal', 'Romania',
+            'Russia', 'Scotland', 'Serbia', 'Singapore', 'South Africa',
+            'South Korea', 'Spain', 'Sweden', 'Switzerland', 'Taiwan',
+            'Thailand', 'United Kingdom', 'United States', 'Other'
         ];
         countries.forEach(c => {
             const opt = document.createElement('option');
@@ -1165,7 +1333,7 @@ const app = {
             const sel = this.bracket[round]?.[mi] === player.id;
             const cls = this.getPlayerClasses(round, mi, player.id, sel);
             const click = clickable ? `onclick="app.selectWinner(${round}, ${mi}, ${player.id})"` : '';
-            return `<div class="bp ${cls}" ${click}>
+            return `<div class="bp ${cls}" ${click} data-pid="${player.id}">
                 <span class="bp-name">${UI.escapeHtml(player.name)}</span>
             </div>`;
         };
@@ -1230,12 +1398,12 @@ const app = {
 
     scheduleBracketRedraw(containerId) {
         requestAnimationFrame(() => {
-            // Reset scale, draw SVG at natural size, then scale down
             this._resetBracketScale();
             this.drawBracketSVG(containerId);
             this._scaleBracketToFit();
         });
         this._attachBracketResizeWatcher(containerId);
+        this._initPlayerTooltip();
     },
 
     _resetBracketScale() {
@@ -1254,12 +1422,12 @@ const app = {
         if (!bracket || !wrapper) return;
         const bracketW = bracket.scrollWidth;
         const bracketH = bracket.scrollHeight;
-        const wrapperW = wrapper.clientWidth - 32;
+        const wrapperW = wrapper.clientWidth;
         if (bracketW > wrapperW && bracketW > 0) {
             const scale = wrapperW / bracketW;
             bracket.style.transformOrigin = 'top left';
             bracket.style.transform = `scale(${scale})`;
-            wrapper.style.height = Math.ceil(bracketH * scale + 32) + 'px';
+            wrapper.style.height = Math.ceil(bracketH * scale + 16) + 'px';
         }
     },
 
@@ -1299,6 +1467,69 @@ const app = {
             window.removeEventListener('resize', redraw);
             if (rafId) cancelAnimationFrame(rafId);
         };
+    },
+
+    // ── Player hover tooltip ─────────────────────────────────────
+
+    _initPlayerTooltip() {
+        if (this._tooltipInited) return;
+        this._tooltipInited = true;
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'player-tooltip';
+        tooltip.style.display = 'none';
+        document.body.appendChild(tooltip);
+        this._tooltip = tooltip;
+
+        let hideTimer = null;
+
+        document.addEventListener('mouseover', (e) => {
+            const bp = e.target.closest('.bp[data-pid]');
+            if (!bp) return;
+            clearTimeout(hideTimer);
+            const pid = parseInt(bp.dataset.pid);
+            const players = this.currentGender === 'men' ? this.menPlayers : this.womenPlayers;
+            const player = players.find(p => p.id === pid);
+            if (!player) return;
+
+            const rankStr = String(player.rank);
+            const rankLabel = rankStr.startsWith('R') ? `${rankStr.slice(1)} Dan Renshi` : `${rankStr} Dan`;
+            const imgHtml = player.img
+                ? `<img class="tooltip-avatar" src="${UI.escapeHtml(player.img)}" alt="">`
+                : `<div class="tooltip-avatar tooltip-avatar-fallback">${UI.escapeHtml(player.name.charAt(0))}</div>`;
+
+            tooltip.innerHTML = `
+                <div class="tooltip-inner">
+                    ${imgHtml}
+                    <div class="tooltip-info">
+                        <div class="tooltip-name">${UI.escapeHtml(player.name)}</div>
+                        ${player.nameJp ? `<div class="tooltip-name-jp">${UI.escapeHtml(player.nameJp)}</div>` : ''}
+                        <div class="tooltip-details">
+                            <span>${UI.escapeHtml(player.prefecture)}</span>
+                            <span>${rankLabel}</span>
+                            ${player.age ? `<span>Age ${player.age}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+
+            const rect = bp.getBoundingClientRect();
+            tooltip.style.display = 'block';
+            const tw = tooltip.offsetWidth;
+            const th = tooltip.offsetHeight;
+            let left = rect.left + rect.width / 2 - tw / 2;
+            let top = rect.top - th - 8;
+            if (top < 4) top = rect.bottom + 8;
+            if (left < 4) left = 4;
+            if (left + tw > window.innerWidth - 4) left = window.innerWidth - tw - 4;
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        });
+
+        document.addEventListener('mouseout', (e) => {
+            const bp = e.target.closest('.bp[data-pid]');
+            if (!bp) return;
+            hideTimer = setTimeout(() => { tooltip.style.display = 'none'; }, 150);
+        });
     },
 
     drawBracketSVG(containerId) {
@@ -1645,7 +1876,7 @@ const app = {
     async viewAllBrackets() {
         this._closeNav();
         this.currentView = 'allBrackets';
-        this._setActiveNav(null);
+        this._setActiveNav('navAllBrackets');
         delete document.body.dataset.intensity;
         this.render();
     },
@@ -1668,11 +1899,12 @@ const app = {
     async _loadAllBrackets() {
         const bracketsList = document.getElementById('bracketsList');
         try {
-            const snap = await db.collection('brackets-' + this.currentGender).get();
-            if (snap.empty) {
-                bracketsList.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:40px;">No brackets saved yet!</p>';
-            } else {
-                this._allBracketItems = [];
+            const [menSnap, womenSnap] = await Promise.all([
+                db.collection('brackets-men').get(),
+                db.collection('brackets-women').get()
+            ]);
+            this._allBracketItems = [];
+            const processSnap = (snap, gender) => {
                 snap.forEach(doc => {
                     const data = doc.data();
                     const uid = doc.id;
@@ -1680,8 +1912,14 @@ const app = {
                     const location = data.location || '';
                     const date = data.timestamp ? data.timestamp.toDate() : null;
                     const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-                    this._allBracketItems.push({ uid, name, location, date, dateStr });
+                    this._allBracketItems.push({ uid, name, location, date, dateStr, gender });
                 });
+            };
+            processSnap(menSnap, 'men');
+            processSnap(womenSnap, 'women');
+            if (!this._allBracketItems.length) {
+                bracketsList.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:40px;">No brackets saved yet!</p>';
+            } else {
                 this._allBracketItems.sort((a, b) => (b.date || 0) - (a.date || 0));
                 this._renderBracketList(this._allBracketItems);
             }
@@ -1715,10 +1953,15 @@ const app = {
         const total = items.length;
 
         let html = `<p style="color:rgba(255,255,255,0.3);font-size:0.8em;margin-bottom:12px;">${total} bracket${total !== 1 ? 's' : ''}</p>`;
-        html += pageItems.map(item => `
-            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}')">
+        html += pageItems.map(item => {
+            const genderBadge = item.gender === 'men'
+                ? '<span class="ab-gender-badge ab-gender-men">MEN</span>'
+                : '<span class="ab-gender-badge ab-gender-women">WOMEN</span>';
+            return `
+            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''} ab-row-${item.gender}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}', '${item.gender}')">
                 <div class="ab-info">
                     <div class="ab-name-wrap">
+                        ${genderBadge}
                         ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
                         <span class="ab-name">${UI.escapeHtml(item.name)}</span>
                     </div>
@@ -1731,7 +1974,8 @@ const app = {
                     </div>
                     <span class="ab-view">VIEW DETAILS →</span>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         if (hasMore) {
             html += '<div style="text-align:center;margin-top:16px;"><button class="bracket-action-btn" onclick="app._abLoadMore()">LOAD MORE</button></div>';
@@ -1747,10 +1991,15 @@ const app = {
         const pageItems = items.slice(start, start + this._abPageSize);
         const hasMore = start + this._abPageSize < items.length;
 
-        const rows = pageItems.map(item => `
-            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}')">
+        const rows = pageItems.map(item => {
+            const genderBadge = item.gender === 'men'
+                ? '<span class="ab-gender-badge ab-gender-men">MEN</span>'
+                : '<span class="ab-gender-badge ab-gender-women">WOMEN</span>';
+            return `
+            <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''} ab-row-${item.gender}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}', '${item.gender}')">
                 <div class="ab-info">
                     <div class="ab-name-wrap">
+                        ${genderBadge}
                         ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
                         <span class="ab-name">${UI.escapeHtml(item.name)}</span>
                     </div>
@@ -1763,7 +2012,8 @@ const app = {
                     </div>
                     <span class="ab-view">VIEW DETAILS →</span>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
 
         // Remove load more button and append new rows
         const btn = document.querySelector('#bracketsList .bracket-action-btn');
@@ -1784,9 +2034,16 @@ const app = {
         this._renderBracketList(filtered);
     },
 
-    async loadSpecificBracket(uid) {
+    async loadSpecificBracket(uid, gender) {
         try {
-            const doc = await db.collection('brackets-' + this.currentGender).doc(uid).get();
+            const g = gender || this.currentGender;
+            if (g !== this.currentGender) {
+                this.currentGender = g;
+                this.buildPlayerLists();
+                this.bracket = {};
+                this.actualResults = null;
+            }
+            const doc = await db.collection('brackets-' + g).doc(uid).get();
             if (doc.exists) {
                 const data = doc.data();
                 this.bracket = data.predictions || {};
@@ -1956,7 +2213,7 @@ const app = {
     async showStats() {
         this._closeNav();
         this.currentView = 'stats';
-        this._setActiveNav(null);
+        this._setActiveNav('navStats');
         delete document.body.dataset.intensity;
         this.render();
     },
@@ -2513,11 +2770,74 @@ const app = {
     },
 
     showDonateModal() {
-        document.getElementById('donateModal').style.display = 'block';
+        this.currentView = 'donate';
+        this._setActiveNav('navDonate');
+        delete document.body.dataset.intensity;
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.render();
     },
 
     closeDonateModal() {
-        document.getElementById('donateModal').style.display = 'none';
+        this.goHome();
+    },
+
+    renderDonatePage() {
+        const container = document.getElementById('gameContainer');
+        container.innerHTML = `
+            <div class="page-view donate-page">
+                <div class="donate-header">
+                    <p class="donate-label">AJKC MADNESS</p>
+                    <h1 class="donate-title">SUPPORT AJKC MADNESS</h1>
+                    <p class="donate-intro">AJKC MADNESS is a passion project built for the kendo community \u2014 a place for fans to engage with the All Japan Championships in a fun and interactive way.</p>
+                    <p class="donate-intro">If you\u2019ve enjoyed using the bracket or want to support future improvements, your contribution helps keep the platform running and growing.</p>
+                </div>
+
+                <div class="donate-why">
+                    <h2 class="donate-why-title">Every donation goes toward</h2>
+                    <div class="donate-why-grid">
+                        <div class="donate-why-item">
+                            <span class="donate-why-icon">\ud83d\udcbb</span>
+                            <p>Improving the website experience</p>
+                        </div>
+                        <div class="donate-why-item">
+                            <span class="donate-why-icon">\u2728</span>
+                            <p>Adding new features and events</p>
+                        </div>
+                        <div class="donate-why-item">
+                            <span class="donate-why-icon">\ud83e\udd3a</span>
+                            <p>Supporting future kendo-related projects</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="donate-tiers">
+                    <h2 class="donate-tiers-title">Choose Your Support</h2>
+                    <div class="donate-tiers-grid">
+                        <div class="donate-tier">
+                            <div class="donate-tier-amount">$3</div>
+                            <p class="donate-tier-desc">Buy us a coffee and help keep the lights on.</p>
+                        </div>
+                        <div class="donate-tier donate-tier-featured">
+                            <div class="donate-tier-badge">MOST POPULAR</div>
+                            <div class="donate-tier-amount">$10</div>
+                            <p class="donate-tier-desc">Help fund new features and improvements for the community.</p>
+                        </div>
+                        <div class="donate-tier">
+                            <div class="donate-tier-amount">$25</div>
+                            <p class="donate-tier-desc">Make a real impact on the future of kendo fan experiences.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="donate-actions">
+                    <a href="https://paypal.me/BettyPark259" class="donate-action-btn" target="_blank" rel="noopener">DONATE VIA PAYPAL</a>
+                    <a href="https://venmo.com/bparkyy" class="donate-action-btn donate-action-btn-gold" target="_blank" rel="noopener">DONATE VIA VENMO</a>
+                </div>
+
+                <p class="donate-thanks">Thank you for being part of this \ud83d\ude4f</p>
+            </div>`;
+        window.scrollTo(0, 0);
     },
 
     // ── Odds toggle ───────────────────────────────────────────
@@ -2573,9 +2893,6 @@ window.addEventListener('click', event => {
     }
     if (event.target === document.getElementById('scoringRulesModal')) {
         app.closeScoringRules();
-    }
-    if (event.target === document.getElementById('donateModal')) {
-        app.closeDonateModal();
     }
     // Close menu when clicking outside
     const menu = document.getElementById('menuDropdown');
