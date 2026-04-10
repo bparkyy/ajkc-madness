@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AJKC Madness — All Japan Kendo Championship Bracket</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AJKC Anarchy — All Japan Kendo Championship Bracket</title>
+    <meta name="theme-color" content="#0d1017">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%230d1017'/><text x='50' y='38' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='28' fill='%23d4a843'>AJKC</text><text x='50' y='72' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='22' fill='white'>⚔</text></svg>">
 
     <!-- Firebase SDK (compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -30,19 +32,26 @@
 
         <!-- Landing nav bar -->
         <nav class="landing-nav">
-            <span class="landing-nav-logo">AJKC MADNESS</span>
+            <a href="#" onclick="event.preventDefault();window.scrollTo({top:0,behavior:'smooth'})" class="landing-nav-logo">AJKC ANARCHY</a>
+            <button class="landing-menu-btn" onclick="this.closest('.landing-nav').querySelector('.landing-nav-links').classList.toggle('landing-nav-open')" aria-label="Menu">☰</button>
             <div class="landing-nav-links">
-                <a href="#howToPlay">HOW TO PLAY</a>
-                <a href="#" onclick="event.preventDefault();app.showDonateModal()" class="landing-nav-donate">DONATE</a>
-                <a href="#" onclick="event.preventDefault();app.showSignInModal()" id="landingSignIn" class="landing-nav-signin">SIGN IN</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingMyBracket()" id="landingMyBracket" style="display:none;">MY BRACKET</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showFaq()">FAQ</a>
+                <a href="#howToPlay" onclick="this.parentElement.classList.remove('landing-nav-open')">HOW TO PLAY</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingAllBrackets()">VIEW ALL BRACKETS</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingLeaderboard()">LEADERBOARD</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingStats()">STATS</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showScoringRules()">RULES</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showDonateModal()" class="landing-nav-donate">DONATE</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showSignInModal()" id="landingSignIn" class="landing-nav-signin">SIGN IN</a>
             </div>
         </nav>
 
         <div class="landing-content">
             <!-- Hero section -->
             <section class="landing-hero">
-                <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMEN'S KENDO CHAMPIONSHIP<br><span style="opacity:0.6;font-size:0.85em;">第74回全日本剣道選手権大会 | 第65回全日本女子剣道選手権大会</span></div>
-                <h1 class="landing-title">AJKC<br><span class="landing-accent">MADNESS</span></h1>
+                <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMENS KENDO CHAMPIONSHIP<br><span style="opacity:0.6;font-size:0.85em;">第74回全日本剣道選手権大会 | 第65回全日本女子剣道選手権大会</span></div>
+                <h1 class="landing-title">AJKC<br><span class="landing-accent">ANARCHY</span></h1>
                 <div class="presented-by">presented by <span class="presented-sponsor">Your Sponsor Here</span></div>
 
                 <div class="landing-countdown" id="countdown">
@@ -59,11 +68,18 @@
                 </div>
 
                 <div class="landing-buttons">
-                    <button class="landing-btn men" onclick="app.enterBracket('men')">MEN'S BRACKET<br><small style="opacity:0.7;font-size:0.7em;">男子の部</small></button>
-                    <button class="landing-btn women" onclick="app.enterBracket('women')">WOMEN'S BRACKET<br><small style="opacity:0.7;font-size:0.7em;">女子の部</small></button>
+                    <button class="landing-btn men" onclick="app.enterBracket('men')">MENS BRACKET<br><small style="opacity:0.7;font-size:0.7em;">男子の部</small></button>
+                    <button class="landing-btn women" onclick="app.enterBracket('women')">WOMENS BRACKET<br><small style="opacity:0.7;font-size:0.7em;">女子の部</small></button>
                 </div>
 
                 <div class="landing-stats" id="landingStats"></div>
+            </section>
+
+            <!-- Video -->
+            <section class="landing-section landing-video-section">
+                <div class="landing-video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/TNtCFkCMRBU?si=HRWXuvlGkgtGj0rc" title="AJKC Anarchy" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                </div>
             </section>
 
             <!-- How to Play -->
@@ -88,7 +104,7 @@
                     <div class="htp-card htp-card-highlight">
                         <span class="htp-num">04</span>
                         <h3>WIN <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">優勝</span></h3>
-                        <p>The highest scores will earn fame, glory, and prizes!</p>
+                        <p>The highest scores will earn fame and glory!</p>
                     </div>
                 </div>
             </section>
@@ -102,7 +118,7 @@
         <!-- Header bar -->
         <div class="app-header">
             <div class="app-header-left">
-                <span class="app-title" onclick="app.goHome()" style="cursor:pointer;">AJKC MADNESS</span>
+                <span class="app-title" onclick="app.goHome()" style="cursor:pointer;">AJKC ANARCHY</span>
             </div>
             <button class="mobile-menu-btn" onclick="document.querySelector('.app-nav').classList.toggle('nav-open')">☰</button>
             <nav class="app-nav">
@@ -110,13 +126,13 @@
                 <button class="nav-link" id="navLeaderboard" onclick="app.showLeaderboard()">LEADERBOARD</button>
                 <button class="nav-link" id="navStats" onclick="app.showStats()">STATS</button>
                 <button class="nav-link" onclick="app.showScoringRules()">RULES</button>
+                <button class="nav-link" id="navFaq" onclick="app.showFaq()">FAQ</button>
                 <button class="nav-link" id="navAllBrackets" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
                 <button class="nav-link nav-donate" id="navDonate" onclick="app.showDonateModal()">DONATE</button>
             </nav>
             <div class="app-header-right">
-                <button id="backToMineBtn" class="back-to-mine-btn" style="display: none;" onclick="app.viewMyBracket()">↩</button>
-                <button id="accountBtn" class="nav-icon-btn" onclick="app.showSignInModal()" title="Account">👤</button>
-                <button id="adminBtn" class="nav-icon-btn" onclick="app.toggleAdminMode()" title="Admin">⚙️</button>
+                <button id="accountBtn" class="nav-link nav-signin" onclick="app.showSignInModal()" title="Account">SIGN IN</button>
+                <button id="adminBtn" class="nav-icon-btn" onclick="app.toggleAdminMode()" title="Admin" style="display:none;">⚙️</button>
             </div>
         </div>
 
@@ -133,8 +149,8 @@
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
             <span id="modeText"></span>
             <select id="adminGenderSelect" onchange="app.switchAdminGender(this.value)" style="margin-left:10px;padding:4px 8px;background:var(--surface-2);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:4px;font-weight:600;">
-                <option value="men">MEN'S</option>
-                <option value="women">WOMEN'S</option>
+                <option value="men">MENS</option>
+                <option value="women">WOMENS</option>
             </select>
             <button onclick="app.saveAdminResults()" style="margin-left: 10px;">Save Results</button>
             <button class="danger" onclick="app.clearActualResults()" style="margin-left: 10px;">Clear Actual Results</button>
@@ -166,7 +182,7 @@
     <footer class="site-footer">
         <div class="footer-content">
             <div class="footer-brand">
-                <span class="footer-logo">AJKC MADNESS</span>
+                <span class="footer-logo">AJKC ANARCHY</span>
                 <p class="footer-tagline">All Japan Kendo Championship Bracket Challenge</p>
             </div>
             <div class="footer-links">
@@ -179,7 +195,7 @@
                 <div class="footer-col">
                     <h4>CONNECT</h4>
                     <a href="mailto:jayeunnie@gmail.com">Contact Us</a>
-                    <a href="mailto:jayeunnie@gmail.com?subject=Business Inquiry - AJKC Madness">Business Inquiries</a>
+                    <a href="mailto:jayeunnie@gmail.com?subject=Business Inquiry - AJKC Anarchy">Business Inquiries</a>
                 </div>
                 <div class="footer-col">
                     <h4>LEGAL</h4>
@@ -189,8 +205,8 @@
             </div>
         </div>
         <div class="footer-bottom">
-            <span>© 2026 AJKC Madness. All rights reserved.</span>
-            <span>ajkcmadness.com</span>
+            <span>© 2026 AJKC Anarchy. All rights reserved.</span>
+            <span>ajkcanarchy.com</span>
         </div>
     </footer>
 
@@ -250,6 +266,9 @@
 
     <!-- Toast container -->
     <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Offline banner -->
+    <div id="offlineBanner" class="offline-banner">You're offline \u2014 changes will sync when reconnected</div>
 
     <script src="js/firebase-config.js"></script>
     <script src="js/data.js"></script>

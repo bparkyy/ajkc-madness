@@ -7,7 +7,10 @@ const UI = {
         return str.replace(/[&<>"']/g, c => map[c]);
     },
 
-    updateAuthUI() { /* admin button always visible */ },
+    updateAuthUI(isAdmin) {
+        const btn = document.getElementById('adminBtn');
+        if (btn) btn.style.display = isAdmin ? 'inline-flex' : 'none';
+    },
 
     showBackToMine(visible) {
         const btn = document.getElementById('backToMineBtn');
@@ -22,9 +25,19 @@ const UI = {
 
     // ── Card matchup view ────────────────────────────────────────
 
-    renderCardMatchup({ player1, player2, roundName, roundNameJp, matchIndex, totalMatches, roundIndex, currentPick, isFirstMatch, odds, showOdds, isFinals }) {
+    renderCardMatchup({ player1, player2, roundName, roundNameJp, matchIndex, totalMatches, roundIndex, currentPick, isFirstMatch, odds, showOdds, isFinals, pickHistory }) {
         const progress = ((matchIndex + (currentPick ? 1 : 0)) / totalMatches) * 100;
         const finalsClass = isFinals ? ' finals-matchup' : '';
+
+        // Overall bracket progress
+        const totalPicks = [32, 16, 8, 4, 2, 1];
+        const totalAllPicks = totalPicks.reduce((a, b) => a + b, 0); // 63
+        let completedPicks = 0;
+        for (let r = 0; r < 6; r++) {
+            const rPicks = app.bracket[r] || {};
+            completedPicks += Object.keys(rPicks).length;
+        }
+        const overallPct = Math.round((completedPicks / totalAllPicks) * 100);
 
         const card = (player, picked, pct) => {
             if (!player) return '<div class="player-card disabled"><span class="card-name">TBD</span></div>';
@@ -68,7 +81,13 @@ const UI = {
                 <div class="game-header">
                     <div class="game-round-name">${isFinals ? '\u2694\ufe0f ' + this.escapeHtml(roundName) + ' \u2694\ufe0f' : this.escapeHtml(roundName)}</div>
                     <div class="game-match-info">Match ${matchIndex + 1} of ${totalMatches}</div>
-                    <div class="game-progress"><div class="game-progress-fill" style="width:${progress}%"></div></div>
+                </div>
+                <div class="bracket-progress">
+                    <div class="bracket-progress-bar"><div class="bracket-progress-fill" style="width:${overallPct}%"></div></div>
+                    <div class="bracket-progress-text">
+                        <span>${completedPicks} of ${totalAllPicks} picks</span>
+                        <span>${overallPct}% complete</span>
+                    </div>
                 </div>
                 ${oddsCheckbox}
                 <div class="card-matchup">
@@ -78,6 +97,7 @@ const UI = {
                 </div>
                 <div class="game-nav">
                     <button onclick="app.prevMatch()" ${isFirstMatch ? 'disabled' : ''}>\u2190 Back</button>
+                    <button class="undo-btn" onclick="app.undoLastPick()" ${!pickHistory || pickHistory.length === 0 ? 'disabled' : ''}>↩ Undo</button>
                     <button onclick="app.nextMatch()" ${!currentPick ? 'disabled' : ''}>Next \u2192</button>
                 </div>
             </div>`;
@@ -103,7 +123,7 @@ const UI = {
                     <p class="round-complete-jp">${this.escapeHtml(roundNameJp || '')} 完了</p>
                 </div>
                 <!-- Ad slot: Between rounds -->
-                <div class="ad-slot" id="adRoundTransition"></div>
+                <div class="ad-slot" id="adRoundTransition" style="display:none"></div>
                 <div class="round-complete-ticker">
                     <p class="ticker-label">${picks.length} winners advance</p>
                     <div class="winner-chips">${winnersHtml}</div>
@@ -116,20 +136,22 @@ const UI = {
 
     renderBracketSummary({ rounds, champion, isReadonly, isComplete, actualResults, viewingName }) {
         // Status label
-        const genderLabel = app.currentGender === 'men' ? "MEN'S BRACKET" : "WOMEN'S BRACKET";
+        const genderLabel = app.currentGender === 'men' ? "MENS BRACKET" : "WOMENS BRACKET";
         const statusLabel = isReadonly && viewingName
             ? `<div class="bracket-status-label">${this.escapeHtml(viewingName)}'s ${genderLabel}</div>`
             : isComplete
                 ? '<div class="bracket-status-label">BRACKET COMPLETED!</div>'
                 : '<div class="bracket-status-label bracket-status-progress">BRACKET IN PROGRESS</div>';
 
-        // Big title
-        const titleHtml = `<h1 class="bracket-page-title">AJKC BRACKET<br>CHALLENGE</h1>`;
+        // Big title — personalize if signed in
+        const userName = document.getElementById('userName')?.value?.trim() || '';
+        const titleText = userName ? `${this.escapeHtml(userName).toUpperCase()}'S AJKC<br>BRACKET` : 'AJKC BRACKET<br>CHALLENGE';
+        const titleHtml = `<h1 class="bracket-page-title">${titleText}</h1>`;
 
         // Gender tabs (hide when viewing someone else's)
         const genderTabs = isReadonly ? '' : `<div class="bracket-gender-tabs">
-            <button id="menBtn" class="bracket-gender-tab${app.currentGender === 'men' ? ' active' : ''}" onclick="app.switchGender('men')">MEN'S BRACKET <span style="opacity:0.5;font-size:0.85em;">男子</span></button>
-            <button id="womenBtn" class="bracket-gender-tab${app.currentGender === 'women' ? ' active' : ''}" onclick="app.switchGender('women')">WOMEN'S BRACKET <span style="opacity:0.5;font-size:0.85em;">女子</span></button>
+            <button id="menBtn" class="bracket-gender-tab${app.currentGender === 'men' ? ' active' : ''}" onclick="app.switchGender('men')">MENS BRACKET <span style="opacity:0.5;font-size:0.85em;">男子</span></button>
+            <button id="womenBtn" class="bracket-gender-tab${app.currentGender === 'women' ? ' active' : ''}" onclick="app.switchGender('women')">WOMENS BRACKET <span style="opacity:0.5;font-size:0.85em;">女子</span></button>
         </div>`;
 
         // Stats card bar
@@ -163,7 +185,8 @@ const UI = {
             : 'NOT YET';
         const championDisplay = champion || '\u2014';
         const hasResults = actualResults && totalActual > 0;
-        const statsBar = `<div class="bracket-stats-bar">
+        const statsBar = `<div class="bracket-stats-container">
+        <div class="bracket-stats-bar bracket-stats-row-1">
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">CORRECT PICKS</span>
                 <span class="bracket-stat-value">${hasResults ? correctPicks + ' / ' + totalActual : 'TBD'}</span>
@@ -177,7 +200,7 @@ const UI = {
                 <span class="bracket-stat-value">${hasResults ? totalPoints : 'TBD'}</span>
             </div>
             <div class="bracket-stat-card">
-                <span class="bracket-stat-label">CHOSEN CHAMPION</span>
+                <span class="bracket-stat-label">PREDICTED WINNER</span>
                 <span class="bracket-stat-value">${this.escapeHtml(championDisplay)}</span>
             </div>
             <div class="bracket-stat-card" style="cursor:help;" title="How often your picks match the most popular choice for each matchup">
@@ -186,17 +209,21 @@ const UI = {
             </div>
             <div class="bracket-stat-card">
                 <span class="bracket-stat-label">SUBMISSION DATE</span>
-                <span class="bracket-stat-value">${dateStr}</span>
+                <span class="bracket-stat-value bracket-stat-date">${dateStr}</span>
             </div>
+        </div>
         </div>`;
 
         // Action buttons
         const actionBtns = !isReadonly
             ? `<div class="bracket-action-btns">
                 <button class="bracket-action-btn bracket-action-gold" onclick="app.startEditing()">EDIT PICKS</button>
-                <button class="bracket-action-btn" onclick="app.shareBracket()">DOWNLOAD BRACKET</button>
+                <button class="bracket-action-btn" onclick="app.shareBracket()">📸 DOWNLOAD BRACKET</button>
+                <button class="bracket-action-btn bracket-action-share" onclick="app.shareLink()">🔗 SHARE LINK</button>
             </div>`
-            : '';
+            : `<div class="bracket-action-btns">
+                <button class="bracket-action-btn" onclick="app.shareBracket()">📸 DOWNLOAD BRACKET</button>
+            </div>`;
 
         const legendHtml = actualResults
             ? `<div class="bracket-legend">
@@ -232,7 +259,7 @@ const UI = {
                 </div>
                 ${statsBar}
                 <!-- Ad slot: Below stats bar -->
-                <div class="ad-slot" id="adBracketStats"></div>
+                <div class="ad-slot" id="adBracketStats" style="display:none"></div>
                 ${genderTabs}
                 ${nameHtml}
                 ${reminderHtml}
@@ -241,7 +268,7 @@ const UI = {
                 <div style="text-align:center">${legendHtml}</div>
                 ${bracketVisualHtml}
                 <!-- Ad slot: Below bracket tree -->
-                <div class="ad-slot" id="adBelowBracket"></div>
+                <div class="ad-slot" id="adBelowBracket" style="display:none"></div>
             </div>`;
     }
 };

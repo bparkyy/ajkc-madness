@@ -15,6 +15,128 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 
+// ── Modal body scroll lock ──────────────────────────────────
+function lockBodyScroll() { document.body.classList.add('modal-open'); }
+function unlockBodyScroll() { document.body.classList.remove('modal-open'); }
+
+// ── Bracket pinch-to-zoom ───────────────────────────────────
+function initBracketPinchZoom(wrapper) {
+    if (!wrapper || wrapper._pinchInited) return;
+    wrapper._pinchInited = true;
+
+    let minScale = 0.2, maxScale = 3;
+    let panX = 0, panY = 0;
+    let startDist = 0, startScale = 1;
+    let startPanX = 0, startPanY = 0;
+    let startMidX = 0, startMidY = 0;
+    let isPanning = false, startPointerX = 0, startPointerY = 0;
+    let isManualZoom = false;
+
+    const bracket = wrapper.querySelector('.ncaa-bracket');
+    if (!bracket) return;
+
+    function getBaseScale() {
+        const bracketW = bracket.scrollWidth;
+        const wrapperW = wrapper.clientWidth;
+        return (bracketW > wrapperW && bracketW > 0) ? wrapperW / bracketW : 1;
+    }
+    let scale = getBaseScale();
+
+    // Add zoom control buttons
+    let controls = wrapper.querySelector('.bracket-zoom-controls');
+    if (!controls) {
+        controls = document.createElement('div');
+        controls.className = 'bracket-zoom-controls';
+        controls.innerHTML = `
+            <button class="bracket-zoom-btn" data-zoom="in" title="Zoom in">+</button>
+            <button class="bracket-zoom-btn" data-zoom="out" title="Zoom out">\u2212</button>
+            <button class="bracket-zoom-btn" data-zoom="reset" title="Reset zoom">↺</button>`;
+        wrapper.appendChild(controls);
+    }
+
+    // Expose manual zoom flag so resize watcher can check
+    wrapper._isManualZoom = () => isManualZoom;
+
+    function applyTransform() {
+        isManualZoom = true;
+        bracket.style.transformOrigin = '0 0';
+        bracket.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        const origH = bracket.offsetHeight || bracket.scrollHeight;
+        wrapper.style.height = Math.max(origH * scale + 16, 200) + 'px';
+        wrapper.style.overflow = 'hidden';
+    }
+
+    function resetZoom() {
+        isManualZoom = false;
+        panX = 0; panY = 0;
+        bracket.style.transform = '';
+        bracket.style.transformOrigin = '';
+        wrapper.style.height = '';
+        wrapper.style.overflow = '';
+        if (typeof app !== 'undefined' && app._scaleBracketToFit) {
+            app._resetBracketScale();
+            app._scaleBracketToFit();
+        }
+        scale = getBaseScale();
+    }
+
+    function getTouchDist(t1, t2) {
+        const dx = t1.clientX - t2.clientX;
+        const dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    wrapper.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            startDist = getTouchDist(e.touches[0], e.touches[1]);
+            startScale = scale;
+            startPanX = panX; startPanY = panY;
+            const r = wrapper.getBoundingClientRect();
+            startMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+            startMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+        } else if (e.touches.length === 1 && isManualZoom) {
+            isPanning = true;
+            startPointerX = e.touches[0].clientX;
+            startPointerY = e.touches[0].clientY;
+            startPanX = panX; startPanY = panY;
+        }
+    }, { passive: false });
+
+    wrapper.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = getTouchDist(e.touches[0], e.touches[1]);
+            const newScale = Math.min(maxScale, Math.max(minScale, startScale * (dist / startDist)));
+            const r = wrapper.getBoundingClientRect();
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
+            panX = midX - (startMidX - startPanX) * (newScale / startScale);
+            panY = midY - (startMidY - startPanY) * (newScale / startScale);
+            scale = newScale;
+            applyTransform();
+        } else if (e.touches.length === 1 && isPanning) {
+            e.preventDefault();
+            panX = startPanX + (e.touches[0].clientX - startPointerX);
+            panY = startPanY + (e.touches[0].clientY - startPointerY);
+            applyTransform();
+        }
+    }, { passive: false });
+
+    wrapper.addEventListener('touchend', () => { isPanning = false; });
+
+    controls.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-zoom]');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const action = btn.dataset.zoom;
+        if (action === 'in') { scale = Math.min(maxScale, scale * 1.4); applyTransform(); }
+        else if (action === 'out') { scale = Math.max(minScale, scale / 1.4); applyTransform(); }
+        else if (action === 'reset') { resetZoom(); }
+    });
+}
+
 const app = {
     players: [],
     menPlayers: [],
@@ -30,6 +152,7 @@ const app = {
     currentGender: 'men',
     viewingOtherBracket: false,
     _viewingBracketName: '',
+    _pickHistory: [],
 
     // Game flow state
     gameState: 'picking',   // 'picking' | 'round-summary' | 'bracket-summary'
@@ -49,6 +172,77 @@ const app = {
         this.startCountdown();
         this.loadLandingStats();
         this._checkShareLink();
+        this._initClickOutsideNav();
+        this._initOfflineDetector();
+        this._initKeyboardNav();
+    },
+
+    _initClickOutsideNav() {
+        document.addEventListener('click', (e) => {
+            // Landing nav
+            const landingNav = document.querySelector('.landing-nav');
+            const landingLinks = document.querySelector('.landing-nav-links');
+            if (landingLinks && landingLinks.classList.contains('landing-nav-open') &&
+                !e.target.closest('.landing-nav-links') && !e.target.closest('.landing-menu-btn')) {
+                landingLinks.classList.remove('landing-nav-open');
+            }
+            // App nav
+            const appNav = document.querySelector('.app-nav');
+            if (appNav && appNav.classList.contains('nav-open') &&
+                !e.target.closest('.app-nav') && !e.target.closest('.mobile-menu-btn')) {
+                appNav.classList.remove('nav-open');
+            }
+        });
+    },
+
+    _initOfflineDetector() {
+        const banner = document.getElementById('offlineBanner');
+        if (!banner) return;
+        const show = () => banner.classList.add('visible');
+        const hide = () => banner.classList.remove('visible');
+        window.addEventListener('offline', show);
+        window.addEventListener('online', () => {
+            hide();
+            showToast('Back online', 'success');
+        });
+        if (!navigator.onLine) show();
+    },
+
+    _initKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            // Only during picking state in bracket view
+            if (this.currentView !== 'bracket' || this.gameState !== 'picking') return;
+            // Don't intercept when typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            const matches = this.getRoundMatches(this.gameRound);
+            const match = matches[this.gameMatch];
+            if (!match) return;
+
+            switch (e.key) {
+                case '1':
+                case 'ArrowLeft':
+                    if (match.player1) { e.preventDefault(); this.pickWinner(this.gameRound, this.gameMatch, match.player1.id); }
+                    break;
+                case '2':
+                case 'ArrowRight':
+                    if (match.player2) { e.preventDefault(); this.pickWinner(this.gameRound, this.gameMatch, match.player2.id); }
+                    break;
+                case 'ArrowDown':
+                case 'Enter':
+                    e.preventDefault();
+                    if (this.bracket[this.gameRound]?.[this.gameMatch]) this.nextMatch();
+                    break;
+                case 'ArrowUp':
+                case 'Backspace':
+                    e.preventDefault();
+                    this.prevMatch();
+                    break;
+                case 'z':
+                    if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.undoLastPick(); }
+                    break;
+            }
+        });
     },
 
     /** Called after entering from landing page */
@@ -106,14 +300,23 @@ const app = {
         // Hide landing, show app
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        this.currentView = 'bracket';
+        this.gameState = 'picking';
 
         this.switchGender(gender);
     },
 
     goHome() {
-        if (this.hasAnyPicks() && !this.userBracketData) {
+        if (!this.viewingOtherBracket && this.hasAnyPicks() && !this.userBracketData) {
             if (!confirm('You have unsaved picks. Leave anyway?')) return;
         }
+        this._closeNav();
+        document.querySelector('.landing-nav-links')?.classList.remove('landing-nav-open');
+        this.currentView = 'bracket';
+        this.gameState = 'picking';
+        this.gameRound = 0;
+        this.gameMatch = 0;
+        this._pickHistory = [];
         document.getElementById('mainApp').style.display = 'none';
         document.getElementById('landingPage').style.display = 'block';
         this.loadLandingStats();
@@ -179,15 +382,19 @@ const app = {
     _updateAccountBtn() {
         const btn = document.getElementById('accountBtn');
         const landingBtn = document.getElementById('landingSignIn');
+        const landingMyBracket = document.getElementById('landingMyBracket');
         const user = this.currentUser;
         const signedIn = user && !user.isAnonymous && user.email;
         if (btn) {
-            btn.textContent = signedIn ? '✓' : '👤';
+            btn.textContent = signedIn ? 'SIGNED IN' : 'SIGN IN';
             btn.title = signedIn ? user.email : 'Sign in';
             btn.style.color = signedIn ? 'var(--kendo-gold)' : '';
         }
         if (landingBtn) {
             landingBtn.textContent = signedIn ? 'SIGNED IN' : 'SIGN IN';
+        }
+        if (landingMyBracket) {
+            landingMyBracket.style.display = signedIn ? '' : 'none';
         }
     },
 
@@ -234,10 +441,12 @@ const app = {
                 </div>`;
         }
         document.getElementById('signInModal').style.display = 'block';
+        lockBodyScroll();
     },
 
     closeSignInModal() {
         document.getElementById('signInModal').style.display = 'none';
+        unlockBodyScroll();
     },
 
     async upgradeWithGoogle() {
@@ -347,9 +556,14 @@ const app = {
     },
 
     async shareBracket() {
-        const nameInput = document.getElementById('submitName') || document.getElementById('userName');
-        const displayName = nameInput?.value?.trim() || 'My';
-        const genderLabel = this.currentGender === 'men' ? "Men's" : "Women's";
+        let displayName;
+        if (this.viewingOtherBracket) {
+            displayName = this._viewingBracketName || 'Their';
+        } else {
+            const nameInput = document.getElementById('submitName') || document.getElementById('userName');
+            displayName = nameInput?.value?.trim() || 'My';
+        }
+        const genderLabel = this.currentGender === 'men' ? "Mens" : "Womens";
         const title = `${displayName}'s ${genderLabel} Bracket`;
 
         const bracketArea = document.querySelector('.bracket-tree-wrapper');
@@ -371,7 +585,7 @@ const app = {
         const subtitleEl = document.createElement('div');
         subtitleEl.className = 'screenshot-title';
         subtitleEl.style.cssText = "font-family:'Lexend',sans-serif;font-size:0.7em;color:rgba(255,255,255,0.3);text-align:center;margin-bottom:4px;letter-spacing:1px;";
-        subtitleEl.textContent = 'AJKC MADNESS — Bracket Challenge 2026';
+        subtitleEl.textContent = 'AJKC ANARCHY — Bracket Challenge 2026';
         const championName = this._getChampionName();
         const championEl = document.createElement('div');
         championEl.className = 'screenshot-title';
@@ -382,7 +596,7 @@ const app = {
         const footerEl = document.createElement('div');
         footerEl.className = 'screenshot-title';
         footerEl.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:0.8em;color:rgba(255,255,255,0.2);text-align:center;margin-top:12px;padding-bottom:8px;letter-spacing:2px;";
-        footerEl.textContent = 'ajkcmadness.com';
+        footerEl.textContent = 'ajkcanarchy.com';
 
         // Insert title at top, footer at bottom
         bracketArea.insertBefore(championEl, bracketArea.firstChild);
@@ -451,16 +665,49 @@ const app = {
         }
     },
 
+    async shareLink() {
+        const uid = this.currentUser?.uid;
+        if (!uid) {
+            showToast('Sign in to share your bracket link', 'error');
+            return;
+        }
+        const url = `${window.location.origin}${window.location.pathname}#bracket/${this.currentGender}/${uid}`;
+        try {
+            if (navigator.share) {
+                await navigator.share({ title: 'My AJKC Anarchy Bracket', url });
+            } else {
+                await navigator.clipboard.writeText(url);
+                showToast('Bracket link copied to clipboard!', 'success');
+            }
+        } catch (e) {
+            // Fallback if share/clipboard fails
+            try {
+                await navigator.clipboard.writeText(url);
+                showToast('Bracket link copied to clipboard!', 'success');
+            } catch {
+                showToast('Could not copy link', 'error');
+            }
+        }
+    },
+
     _checkShareLink() {
         const hash = window.location.hash;
         const match = hash.match(/^#bracket\/(men|women)\/(.+)$/);
         if (match) {
             const [, gender, uid] = match;
             window.location.hash = '';
-            // Delay to let the app initialize
-            setTimeout(() => {
-                this.enterBracket(gender);
-                setTimeout(() => this.loadSpecificBracket(uid), 500);
+            // Delay to let the app initialize, then load directly without intermediate render
+            setTimeout(async () => {
+                document.getElementById('landingPage').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'block';
+                this.currentView = 'bracket';
+                this.currentGender = gender;
+                this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
+                document.body.className = gender === 'women' ? 'women' : '';
+                document.getElementById('menBtn')?.classList.toggle('active', gender === 'men');
+                document.getElementById('womenBtn')?.classList.toggle('active', gender === 'women');
+                await this.checkLockStatus();
+                await this.loadSpecificBracket(uid, gender);
             }, 300);
         }
     },
@@ -491,6 +738,7 @@ const app = {
                 </div>
             </div>`;
         document.getElementById('signInModal').style.display = 'block';
+        lockBodyScroll();
     },
 
     // ── Gender switching ────────────────────────────────────────
@@ -499,6 +747,7 @@ const app = {
         this.currentGender = gender;
         this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
         this.bracket = {};
+        this._pickHistory = [];
         this.viewingOtherBracket = false;
         this.gameState = 'picking';
         this.gameRound = 0;
@@ -537,7 +786,9 @@ const app = {
     async checkLockStatus() {
         try {
             const doc = await db.collection('settings').doc('tournament').get();
-            this.isLocked = doc.exists ? (doc.data().locked || false) : false;
+            const manualLock = doc.exists ? (doc.data().locked || false) : false;
+            const autoLock = new Date() >= this.tournamentDate;
+            this.isLocked = manualLock || autoLock;
             document.getElementById('lockedNotice').style.display = this.isLocked ? 'block' : 'none';
         } catch (e) { console.error('Error checking lock status:', e); }
     },
@@ -739,8 +990,12 @@ const app = {
 
     async clearActualResults() {
         const gender = this.currentGender;
-        const label = gender === 'men' ? "men's" : "women's";
-        if (!confirm(`Clear actual results for the ${label} bracket? This won't delete user brackets.`)) return;
+        const label = gender === 'men' ? "mens" : "womens";
+        const input = prompt(`This will clear actual results for the ${label} bracket.\n\nType DELETE to confirm:`);
+        if (input !== 'DELETE') {
+            if (input !== null) showToast('Cancelled — you must type DELETE exactly.', 'error');
+            return;
+        }
         try {
             await db.collection('actualResults-' + gender).doc('current').delete();
             this.actualResults = null;
@@ -764,8 +1019,12 @@ const app = {
 
     async clearUserData() {
         const gender = this.currentGender;
-        const label = gender === 'men' ? "men's" : "women's";
-        if (!confirm(`Clear all user bracket submissions for the ${label} bracket? This won't delete actual results.`)) return;
+        const label = gender === 'men' ? "mens" : "womens";
+        const input = prompt(`This will delete ALL user bracket submissions for the ${label} bracket.\n\nType DELETE to confirm:`);
+        if (input !== 'DELETE') {
+            if (input !== null) showToast('Cancelled — you must type DELETE exactly.', 'error');
+            return;
+        }
         try {
             const snap = await db.collection('brackets-' + gender).get();
             const promises = [];
@@ -779,7 +1038,11 @@ const app = {
     },
 
     async clearAll() {
-        if (!confirm('Clear ALL data for this bracket? Cannot be undone!')) return;
+        const input = prompt('This will delete ALL data for this bracket (users + results).\n\nType DELETE to confirm:');
+        if (input !== 'DELETE') {
+            if (input !== null) showToast('Cancelled — you must type DELETE exactly.', 'error');
+            return;
+        }
         try {
             const snap = await db.collection('brackets-' + this.currentGender).get();
             const promises = [];
@@ -850,6 +1113,18 @@ const app = {
     pickWinner(round, matchIndex, playerId) {
         clearTimeout(this._advanceTimeout);
         const oldPick = this.bracket[round]?.[matchIndex];
+
+        // Haptic feedback on mobile
+        if (navigator.vibrate) navigator.vibrate(10);
+
+        // Record undo history
+        this._pickHistory.push({
+            round, matchIndex,
+            oldPick: oldPick !== undefined ? oldPick : null,
+            gameRound: this.gameRound,
+            gameMatch: this.gameMatch
+        });
+
         if (!this.bracket[round]) this.bracket[round] = {};
         this.bracket[round][matchIndex] = playerId;
 
@@ -939,6 +1214,26 @@ const app = {
             this.gameRound--;
             this.gameMatch = 32 / Math.pow(2, this.gameRound) - 1;
         }
+        this.render();
+    },
+
+    undoLastPick() {
+        if (!this._pickHistory.length) return;
+        clearTimeout(this._advanceTimeout);
+        const last = this._pickHistory.pop();
+        // Restore the old pick (or remove it)
+        if (last.oldPick === null) {
+            delete this.bracket[last.round]?.[last.matchIndex];
+        } else {
+            if (!this.bracket[last.round]) this.bracket[last.round] = {};
+            this.bracket[last.round][last.matchIndex] = last.oldPick;
+        }
+        // Invalidate downstream from this change
+        this.invalidateDownstream(last.round, last.matchIndex);
+        // Navigate back to where the pick was made
+        this.gameRound = last.gameRound;
+        this.gameMatch = last.gameMatch;
+        this.gameState = 'picking';
         this.render();
     },
 
@@ -1111,7 +1406,7 @@ const app = {
                 <p class="pf-subtitle" style="margin-top:8px;opacity:0.5;">Good luck and may the best bracket win!</p>
                 <div class="pf-thanks-btns">
                     <button class="pf-btn pf-btn-primary" onclick="app.showBracketSummary()">VIEW MY BRACKET</button>
-                    <button class="pf-btn pf-btn-gold" onclick="app.showDonateModal()">SUPPORT AJKCMADNESS</button>
+                    <button class="pf-btn pf-btn-gold" onclick="app.showDonateModal()">SUPPORT AJKCANARCHY</button>
                 </div>
             </div>`;
     },
@@ -1130,6 +1425,7 @@ const app = {
     },
 
     startEditing() {
+        this._pickHistory = [];
         this.gameState = 'picking';
         this.gameRound = 0;
         this.gameMatch = 0;
@@ -1137,6 +1433,7 @@ const app = {
     },
 
     resumePicking() {
+        this._pickHistory = [];
         this.gameState = 'picking';
         this.findFirstIncompleteMatch();
         this.render();
@@ -1230,6 +1527,7 @@ const app = {
         if (this.currentView === 'allBrackets') { this.renderAllBracketsPage(); return; }
         if (this.currentView === 'legal') { this.renderLegalPage(); return; }
         if (this.currentView === 'donate') { this.renderDonatePage(); return; }
+        if (this.currentView === 'faq') { this.renderFaqPage(); return; }
 
         // Set round intensity on body for progressive atmosphere
         if (this.gameState === 'picking') {
@@ -1262,9 +1560,10 @@ const app = {
             const p1Count = this._oddsCache[r]?.[m]?.[match.player1?.id] || 0;
             const p2Count = this._oddsCache[r]?.[m]?.[match.player2?.id] || 0;
             const total = p1Count + p2Count;
+            const p1Pct = total > 0 ? Math.round((p1Count / total) * 100) : 0;
             odds = {
-                p1Pct: total > 0 ? Math.round((p1Count / total) * 100) : 0,
-                p2Pct: total > 0 ? Math.round((p2Count / total) * 100) : 0,
+                p1Pct,
+                p2Pct: total > 0 ? 100 - p1Pct : 0,
                 total
             };
         }
@@ -1281,7 +1580,8 @@ const app = {
             isFirstMatch: this.gameRound === 0 && this.gameMatch === 0,
             odds,
             showOdds: this.showOdds,
-            isFinals: this.gameRound === 5
+            isFinals: this.gameRound === 5,
+            pickHistory: this._pickHistory
         });
     },
 
@@ -1465,10 +1765,21 @@ const app = {
     // ── SVG bracket connector lines ──────────────────────────────
 
     scheduleBracketRedraw(containerId) {
+        // Double rAF to ensure layout is fully computed (fixes small bracket on gender switch)
         requestAnimationFrame(() => {
-            this._resetBracketScale();
-            this.drawBracketSVG(containerId);
-            this._scaleBracketToFit();
+            requestAnimationFrame(() => {
+                this._resetBracketScale();
+                this.drawBracketSVG(containerId);
+                this._scaleBracketToFit();
+                // Reset and re-init pinch-to-zoom on mobile
+                const wrapper = document.querySelector('.bracket-tree-wrapper');
+                if (wrapper) {
+                    wrapper._pinchInited = false;
+                    const oldControls = wrapper.querySelector('.bracket-zoom-controls');
+                    if (oldControls) oldControls.remove();
+                    initBracketPinchZoom(wrapper);
+                }
+            });
         });
         this._attachBracketResizeWatcher(containerId);
         this._initPlayerTooltip();
@@ -1495,7 +1806,7 @@ const app = {
             const scale = wrapperW / bracketW;
             bracket.style.transformOrigin = 'top left';
             bracket.style.transform = `scale(${scale})`;
-            wrapper.style.height = Math.ceil(bracketH * scale + 16) + 'px';
+            wrapper.style.height = Math.ceil(bracketH * scale) + 'px';
         }
     },
 
@@ -1510,6 +1821,9 @@ const app = {
 
         let rafId = null;
         const redraw = () => {
+            // Skip if user is manually zoomed
+            const wrapper = document.querySelector('.bracket-tree-wrapper');
+            if (wrapper && wrapper._isManualZoom && wrapper._isManualZoom()) return;
             if (rafId) cancelAnimationFrame(rafId);
             rafId = requestAnimationFrame(() => {
                 this._resetBracketScale();
@@ -1764,9 +2078,7 @@ const app = {
             });
             let rank = 1, prevScore = null;
             scores.forEach((entry, i) => {
-                if (prevScore !== null && entry.score !== prevScore) rank = i + 1;
-                prevScore = entry.score;
-                entry.rank = rank;
+                entry.rank = i + 1;
             });
             this._lbScores = scores;
             this._lbPage = 0;
@@ -1784,20 +2096,79 @@ const app = {
                 <div class="lb-header">
                     <div>
                         <h1 class="page-title">LEADERBOARD</h1>
-                        <p class="lb-subtitle">67th All Japan Kendo Championship Bracket Challenge</p>
+                        <p class="lb-subtitle">All Japan Kendo Championship Bracket Challenge</p>
                     </div>
                     <div class="lb-tabs">
-                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'men' ? ' active' : ''}" onclick="app.switchLeaderboardGender('men')" id="lbMenTab">MEN'S AJKC</button>
-                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'women' ? ' active' : ''}" onclick="app.switchLeaderboardGender('women')" id="lbWomenTab">WOMEN'S AJKC</button>
+                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'men' ? ' active' : ''}" onclick="app.switchLeaderboardGender('men')" id="lbMenTab">MENS AJKC</button>
+                        <button class="lb-tab${(this._lbGender || this.currentGender) === 'women' ? ' active' : ''}" onclick="app.switchLeaderboardGender('women')" id="lbWomenTab">WOMENS AJKC</button>
                     </div>
                 </div>
-                <div id="leaderboardContent"><p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading...</p></div>
+                <div id="leaderboardContent">
+                    <div class="skeleton-podium">
+                        <div class="skeleton skeleton-podium-item"></div>
+                        <div class="skeleton skeleton-podium-item"></div>
+                        <div class="skeleton skeleton-podium-item"></div>
+                    </div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                    <div class="skeleton skeleton-row"></div>
+                </div>
                 <!-- Sponsor slot -->
-                <div class="sponsor-slot" id="sponsorLeaderboard"></div>
-                <div class="ad-slot" id="adLeaderboard"></div>
+                <div class="sponsor-slot" id="sponsorLeaderboard" style="display:none"></div>
+                <div class="ad-slot" id="adLeaderboard" style="display:none"></div>
             </div>`;
         this.updateLeaderboard();
         this._startLeaderboardListener();
+        this._initPullToRefresh('leaderboardContent', () => this.updateLeaderboard());
+    },
+
+    _initPullToRefresh(containerId, refreshFn) {
+        const container = document.getElementById(containerId);
+        if (!container || container._ptrInited) return;
+        container._ptrInited = true;
+
+        let startY = 0, pulling = false;
+        const indicator = document.createElement('div');
+        indicator.className = 'ptr-indicator';
+        indicator.style.display = 'none';
+        indicator.textContent = '\u2193 Pull to refresh';
+        container.parentElement.insertBefore(indicator, container);
+
+        container.addEventListener('touchstart', (e) => {
+            if (container.scrollTop === 0 || window.scrollY === 0) {
+                startY = e.touches[0].clientY;
+                pulling = true;
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchmove', (e) => {
+            if (!pulling) return;
+            const dy = e.touches[0].clientY - startY;
+            if (dy > 40 && window.scrollY === 0) {
+                indicator.style.display = 'block';
+                indicator.textContent = dy > 80 ? '\u2191 Release to refresh' : '\u2193 Pull to refresh';
+            } else {
+                indicator.style.display = 'none';
+            }
+        }, { passive: true });
+
+        container.addEventListener('touchend', (e) => {
+            if (!pulling) return;
+            pulling = false;
+            if (indicator.style.display === 'block' && indicator.textContent.includes('Release')) {
+                indicator.textContent = 'Refreshing...';
+                indicator.classList.add('refreshing');
+                refreshFn();
+                setTimeout(() => {
+                    indicator.style.display = 'none';
+                    indicator.classList.remove('refreshing');
+                }, 1000);
+            } else {
+                indicator.style.display = 'none';
+            }
+        }, { passive: true });
     },
 
     _renderLeaderboard() {
@@ -1851,11 +2222,11 @@ const app = {
             ? '<div style="text-align:center;margin-top:16px"><button class="bracket-action-btn" onclick="app._lbLoadMore()">LOAD MORE RANKINGS</button></div>'
             : '';
         container.innerHTML = `
-            <div class="ad-slot" id="adLeaderboardTop"></div>
+            <div class="ad-slot" id="adLeaderboardTop" style="display:none"></div>
             <div class="lb-podium">${podiumHtml}</div>
             ${youRowHtml}
             <div class="lb-table">
-                <div class="lb-table-header"><span>RANK</span><span>CONTENDER</span><span>CORRECT PICKS</span><span>SUBMITTED</span><span>TOTAL POINTS</span></div>
+                <div class="lb-table-header"><span>RANK</span><span>NAME</span><span class="lb-row-correct">PICKS</span><span class="lb-row-date">SUBMITTED</span><span>PTS</span></div>
                 <div id="lbRows">${rowsHtml}</div>
             </div>
             ${loadMoreHtml}`;
@@ -1891,7 +2262,17 @@ const app = {
         this.updateLeaderboard(gender);
     },
 
+    _warnIfPicking(action) {
+        if (this.viewingOtherBracket) return false;
+        if (this.currentView === 'bracket' && this.gameState === 'picking' &&
+            this.hasAnyPicks() && !this.isBracketComplete() && !this.userBracketData) {
+            return !confirm('You have an incomplete bracket. Your unsaved picks will be lost. Continue?');
+        }
+        return false;
+    },
+
     showLeaderboard() {
+        if (this._warnIfPicking()) return;
         this._closeNav();
         this._lbGender = this.currentGender;
         this.currentView = 'leaderboard';
@@ -1927,7 +2308,8 @@ const app = {
 
     viewBracketFromLeaderboard(uid) {
         const lbGender = this._lbGender || this.currentGender;
-        this.closeLeaderboard();
+        // Switch view without rendering — loadSpecificBracket will render
+        this.currentView = 'bracket';
         if (lbGender !== this.currentGender) {
             this.currentGender = lbGender;
             this.players = lbGender === 'men' ? this.menPlayers : this.womenPlayers;
@@ -1942,6 +2324,7 @@ const app = {
     // ── View all brackets ───────────────────────────────────────
 
     async viewAllBrackets() {
+        if (this._warnIfPicking()) return;
         this._closeNav();
         this.currentView = 'allBrackets';
         this._setActiveNav('navAllBrackets');
@@ -1954,12 +2337,12 @@ const app = {
         container.innerHTML = `
             <div class="page-view">
                 <h1 class="page-title">ALL BRACKETS</h1>
-                <div style="max-width:600px;margin:0 auto 16px;position:relative;">
+                <div style="max-width:1000px;margin:0 auto 16px;position:relative;">
                     <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:0.9em;pointer-events:none;">&#128269;</span>
                     <input type="text" id="bracketSearch" class="submit-name-input" style="width:100%;padding-left:34px;" placeholder="Find bracket by name..." oninput="app.filterBrackets(this.value)" />
                 </div>
-                <div id="bracketsList" class="bracket-list" style="max-width:600px;margin:0 auto;"></div>
-                <div class="ad-slot" id="adAllBrackets"></div>
+                <div id="bracketsList" class="bracket-list" style="max-width:1000px;margin:0 auto;"></div>
+                <div class="ad-slot" id="adAllBrackets" style="display:none"></div>
             </div>`;
         this._loadAllBrackets();
     },
@@ -2107,9 +2490,10 @@ const app = {
             const g = gender || this.currentGender;
             if (g !== this.currentGender) {
                 this.currentGender = g;
-                this.buildPlayerLists();
+                this.players = g === 'men' ? this.menPlayers : this.womenPlayers;
                 this.bracket = {};
                 this.actualResults = null;
+                document.body.className = g === 'women' ? 'women' : '';
             }
             const doc = await db.collection('brackets-' + g).doc(uid).get();
             if (doc.exists) {
@@ -2152,6 +2536,7 @@ const app = {
 
     closeModal() {
         document.getElementById('bracketsModal').style.display = 'none';
+        unlockBodyScroll();
     },
 
     // ── Menu ─────────────────────────────────────────────────
@@ -2207,24 +2592,24 @@ const app = {
             { title: '2. How We Use Your Information', body: 'We use your information to create and manage your account, display usernames on leaderboards or public features, operate and improve the platform, monitor performance, and communicate important updates.' },
             { title: '3. Cookies and Tracking', body: 'We may use cookies or similar technologies to keep you logged in and improve the user experience. By using the site, you consent to this use.' },
             { title: '4. Third-Party Services', body: 'We may use third-party services for authentication, analytics, hosting, and sponsor advertising. These services may collect limited information under their own privacy policies.' },
-            { title: '5. Advertising and Sponsors', body: 'ajkcmadness may display sponsor banners and advertising placements. We do not sell your personal information.' },
+            { title: '5. Advertising and Sponsors', body: 'ajkcanarchy may display sponsor banners and advertising placements. We do not sell your personal information.' },
             { title: '6. Data Sharing', body: 'We may share limited information with service providers that help operate the platform, or when required by law. We do not sell personal data.' },
             { title: '7. Data Security', body: 'We take reasonable steps to protect your information, but no method of transmission or storage is completely secure.' },
-            { title: '8. International Users', body: 'ajkcmadness is accessible worldwide. By using the platform, you understand that your information may be processed in the United States.' },
+            { title: '8. International Users', body: 'ajkcanarchy is accessible worldwide. By using the platform, you understand that your information may be processed in the United States.' },
             { title: '9. Children\&#39;s Privacy', body: 'This platform is not intended for children under 13, and we do not knowingly collect personal information from children.' },
             { title: '10. Your Rights', body: 'You may request account deletion or ask for access to your information by contacting jayeunnie@gmail.com.' },
             { title: '11. Changes to This Policy', body: 'We may update this Privacy Policy from time to time. Continued use of the site means you accept the updated version.' }
         ];
 
         const termsSections = [
-            { title: '1. Use of the Platform', body: 'ajkcmadness provides a free, for-fun bracket prediction game related to kendo competitions. No purchase is required, and no prizes or monetary rewards are currently offered.' },
+            { title: '1. Use of the Platform', body: 'ajkcanarchy provides a free, for-fun bracket prediction game related to kendo competitions. No purchase is required, and no prizes or monetary rewards are currently offered.' },
             { title: '2. Accounts', body: 'To use certain features, you must create an account. You agree to provide accurate information, keep your login secure, and remain responsible for activity on your account. We may suspend or terminate accounts at our discretion.' },
             { title: '3. Usernames and Public Display', body: 'Usernames may appear publicly, including on leaderboards. Please do not use offensive, misleading, or inappropriate usernames. We reserve the right to change or remove usernames.' },
             { title: '4. Acceptable Use', body: 'You agree not to hack, disrupt, abuse, scrape, bot, or otherwise interfere with the platform or other users\' experience.' },
-            { title: '5. Intellectual Property', body: 'All branding, site design, original content, and platform features of ajkcmadness are owned by us unless otherwise stated. You may not copy or distribute them without permission.' },
+            { title: '5. Intellectual Property', body: 'All branding, site design, original content, and platform features of ajkcanarchy are owned by us unless otherwise stated. You may not copy or distribute them without permission.' },
             { title: '6. Advertising', body: 'The platform may include sponsor banners or other advertising placements. We are not responsible for third-party products, services, or claims.' },
             { title: '7. Disclaimer', body: 'This platform is provided for entertainment purposes only. We do not guarantee prediction accuracy, uninterrupted availability, or error-free operation.' },
-            { title: '8. Limitation of Liability', body: 'To the fullest extent permitted by law, ajkcmadness is not liable for damages, losses, data issues, or interruptions arising from your use of the platform.' },
+            { title: '8. Limitation of Liability', body: 'To the fullest extent permitted by law, ajkcanarchy is not liable for damages, losses, data issues, or interruptions arising from your use of the platform.' },
             { title: '9. Termination', body: 'We may suspend or terminate access to the platform at any time, with or without notice, for any reason.' },
             { title: '10. Changes to Terms', body: 'We may update these Terms of Service from time to time. Continued use of the platform means you accept the revised terms.' },
             { title: '11. Contact', body: 'Questions about these Terms may be sent to jayeunnie@gmail.com.' }
@@ -2238,9 +2623,9 @@ const app = {
         container.innerHTML = `
             <div class="page-view legal-page">
                 <div class="legal-header">
-                    <p class="legal-label">AJKCMADNESS</p>
+                    <p class="legal-label">AJKCANARCHY</p>
                     <h1 class="legal-main-title">Privacy Policy & Terms of Service</h1>
-                    <p class="legal-intro">Clear information about how ajkcmadness handles accounts, public usernames, login tracking, sponsor placements, and your use of the platform.</p>
+                    <p class="legal-intro">Clear information about how ajkcanarchy handles accounts, public usernames, login tracking, sponsor placements, and your use of the platform.</p>
                 </div>
 
                 <div class="legal-meta">
@@ -2256,8 +2641,8 @@ const app = {
 
                 <div class="legal-preamble">
                     ${isPrivacy
-                        ? 'ajkcmadness operates an online bracket-style game platform related to kendo competitions. This Privacy Policy explains what information we collect, how we use it, and how we work to protect it.'
-                        : 'By using ajkcmadness, you agree to these Terms of Service. They explain the rules for using the platform, public usernames, sponsor advertising, and limitations of liability.'}
+                        ? 'ajkcanarchy operates an online bracket-style game platform related to kendo competitions. This Privacy Policy explains what information we collect, how we use it, and how we work to protect it.'
+                        : 'By using ajkcanarchy, you agree to these Terms of Service. They explain the rules for using the platform, public usernames, sponsor advertising, and limitations of liability.'}
                 </div>
 
                 <div class="legal-sections">${sectionsHtml}</div>
@@ -2267,7 +2652,7 @@ const app = {
                     <div class="legal-notes-grid">
                         <div class="legal-note"><p class="legal-note-title">Public usernames</p><p>Usernames may appear on leaderboards or similar features, so avoid using personal information you do not want shown publicly.</p></div>
                         <div class="legal-note"><p class="legal-note-title">No prizes right now</p><p>The current version is free to play and does not offer prizes or monetary rewards.</p></div>
-                        <div class="legal-note"><p class="legal-note-title">Sponsor placements</p><p>The site may include direct sponsor banners or branded placements, but ajkcmadness is not responsible for third-party products or services.</p></div>
+                        <div class="legal-note"><p class="legal-note-title">Sponsor placements</p><p>The site may include direct sponsor banners or branded placements, but ajkcanarchy is not responsible for third-party products or services.</p></div>
                     </div>
                 </div>
             </div>`;
@@ -2279,6 +2664,7 @@ const app = {
     _statsCharts: [],
 
     async showStats() {
+        if (this._warnIfPicking()) return;
         this._closeNav();
         this.currentView = 'stats';
         this._setActiveNav('navStats');
@@ -2290,12 +2676,22 @@ const app = {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
             <div class="page-view">
-                <div class="ad-slot" id="adStatsTop"></div>
+                <div class="ad-slot" id="adStatsTop" style="display:none"></div>
                 <h1 class="page-title">TOURNAMENT STATS</h1>
-                <div id="statsContent"><p style="text-align:center;padding:40px;color:rgba(255,255,255,0.5);">Loading stats...</p></div>
-                <div class="ad-slot" id="adStats"></div>
+                <div id="statsContent">
+                    <div class="skeleton-stat-cards">
+                        <div class="skeleton skeleton-stat"></div>
+                        <div class="skeleton skeleton-stat"></div>
+                        <div class="skeleton skeleton-stat"></div>
+                        <div class="skeleton skeleton-stat"></div>
+                    </div>
+                    <div class="skeleton skeleton-section"></div>
+                    <div class="skeleton skeleton-section" style="height:150px"></div>
+                </div>
+                <div class="ad-slot" id="adStats" style="display:none"></div>
             </div>`;
         this._loadStats();
+        this._initPullToRefresh('statsContent', () => this._loadStats());
     },
 
     async _loadStats() {
@@ -2326,6 +2722,12 @@ const app = {
 
             let html = '';
 
+            // Collect location data
+            const locationCounts = {};
+            menSnap.forEach(doc => { const loc = doc.data().location; if (loc) locationCounts[loc] = (locationCounts[loc] || 0) + 1; });
+            womenSnap.forEach(doc => { const loc = doc.data().location; if (loc) locationCounts[loc] = (locationCounts[loc] || 0) + 1; });
+            const countryCount = Object.keys(locationCounts).length;
+
             // Overview cards
             const total = menSnap.size + womenSnap.size;
             html += `<div class="stat-cards">
@@ -2335,42 +2737,41 @@ const app = {
                 </div>
                 <div class="stat-card">
                     <div class="stat-number">${menSnap.size}</div>
-                    <div class="stat-label">Men's Brackets</div>
+                    <div class="stat-label">Mens Brackets</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number">${womenSnap.size}</div>
-                    <div class="stat-label">Women's Brackets</div>
+                    <div class="stat-label">Womens Brackets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${countryCount}</div>
+                    <div class="stat-label">Countries</div>
                 </div>
             </div>`;
 
-            // Podiums side by side
-            html += `<div class="stats-grid">`;
-            html += this._buildPodium("Men's Champion Picks", menData.champions);
-            html += this._buildPodium("Women's Champion Picks", womenData.champions);
-            html += `</div>`;
+            // Global map
+            html += this._buildGlobalMap(locationCounts);
 
-            // Bar charts
-            html += `<div class="stats-grid">`;
-            html += `<div class="stat-section"><h3 class="stat-section-title">Men's Champion Distribution</h3><div style="position:relative;height:250px;"><canvas id="menBarChart"></canvas></div></div>`;
-            html += `<div class="stat-section"><h3 class="stat-section-title">Women's Champion Distribution</h3><div style="position:relative;height:250px;"><canvas id="womenBarChart"></canvas></div></div>`;
+            // Champion picks tables
+            const menActualChampId = menActualResults?.[5]?.[0] || null;
+            const womenActualChampId = womenActualResults?.[5]?.[0] || null;
+            const menActualChamp = menActualChampId ? this.menPlayers.find(p => p.id === menActualChampId)?.name : null;
+            const womenActualChamp = womenActualChampId ? this.womenPlayers.find(p => p.id === womenActualChampId)?.name : null;
+            html += `<div class="stats-grid stats-grid-wide">`;
+            html += this._buildChampionTable("Mens Champion Picks", menData.champions, menActualChamp);
+            html += this._buildChampionTable("Womens Champion Picks", womenData.champions, womenActualChamp);
             html += `</div>`;
 
             // Most controversial
-            html += `<div class="stats-grid">`;
-            html += this._buildControversial("Men's Most Controversial", menData.controversial, this.menPlayers);
-            html += this._buildControversial("Women's Most Controversial", womenData.controversial, this.womenPlayers);
+            html += `<div class="stats-grid stats-grid-wide">`;
+            html += this._buildControversial("Mens Most Controversial", menData.controversial, this.menPlayers);
+            html += this._buildControversial("Womens Most Controversial", womenData.controversial, this.womenPlayers);
             html += `</div>`;
 
             // Pick popularity
             html += `<div class="stats-grid">`;
-            html += this._buildPickPopularity("Men's Pick Popularity", menData.pickData, this.menPlayers);
-            html += this._buildPickPopularity("Women's Pick Popularity", womenData.pickData, this.womenPlayers);
-            html += `</div>`;
-
-            // Survival tracker
-            html += `<div class="stats-grid">`;
-            html += this._buildSurvivalTracker("Men's Survival", menSnap, 'men', menActualResults);
-            html += this._buildSurvivalTracker("Women's Survival", womenSnap, 'women', womenActualResults);
+            html += this._buildPickPopularity("Mens Pick Popularity", menData.pickData, this.menPlayers);
+            html += this._buildPickPopularity("Womens Pick Popularity", womenData.pickData, this.womenPlayers);
             html += `</div>`;
 
             // Achievement badges
@@ -2378,9 +2779,7 @@ const app = {
 
             content.innerHTML = html;
 
-            // Render bar charts
-            this._renderBarChart('menBarChart', menData.champions, 'men');
-            this._renderBarChart('womenBarChart', womenData.champions, 'women');
+
         } catch (e) {
             console.error('Error loading stats:', e);
             content.innerHTML = '<p style="text-align:center;color:#f00;">Error loading stats</p>';
@@ -2442,26 +2841,123 @@ const app = {
         };
     },
 
-    _buildPodium(title, champions) {
-        if (champions.length === 0) {
+    // Country center coordinates (approx lat/lng)
+    _countryCoords: {
+        'Argentina': [-34, -64], 'Australia': [-25, 134], 'Austria': [47.5, 14],
+        'Belgium': [50.8, 4.5], 'Brazil': [-14, -51], 'Canada': [56, -106],
+        'Chile': [-35, -71], 'China': [35, 105], 'Colombia': [4, -72],
+        'Croatia': [45.1, 15.2], 'Czech Republic': [49.8, 15.5], 'Denmark': [56, 10],
+        'Finland': [64, 26], 'France': [46.6, 2.2], 'Germany': [51.2, 10.4],
+        'Hong Kong': [22.3, 114.2], 'Hungary': [47.2, 19.5], 'Iceland': [65, -18],
+        'India': [21, 78], 'Indonesia': [-5, 120], 'Ireland': [53.4, -8],
+        'Israel': [31.5, 35], 'Italy': [42.5, 12.5], 'Japan': [36.2, 138.3],
+        'Luxembourg': [49.8, 6.1], 'Malaysia': [4.2, 101.9], 'Mexico': [23.6, -102.5],
+        'Netherlands': [52.1, 5.3], 'New Zealand': [-41, 174], 'Norway': [62, 10],
+        'Peru': [-10, -76], 'Philippines': [13, 122], 'Poland': [52, 20],
+        'Portugal': [39.4, -8], 'Romania': [46, 25], 'Russia': [61, 105],
+        'Scotland': [56.5, -4], 'Serbia': [44.2, 20.5], 'Singapore': [1.35, 103.8],
+        'South Africa': [-30.6, 25.5], 'South Korea': [36.5, 128], 'Spain': [40, -3.7],
+        'Sweden': [62, 15], 'Switzerland': [46.8, 8.2], 'Taiwan': [23.7, 121],
+        'Thailand': [15, 101], 'United Kingdom': [54, -2], 'United States': [38, -97],
+        'Other': [0, 0]
+    },
+
+    _buildGlobalMap(locationCounts) {
+        const entries = Object.entries(locationCounts).filter(([c]) => c !== 'Other' && this._countryCoords[c]);
+        const otherCount = locationCounts['Other'] || 0;
+        if (entries.length === 0 && otherCount === 0) {
+            return `<div class="stat-section" style="margin-bottom:24px;"><h3 class="stat-section-title">Global Submissions</h3>
+                <p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No location data yet</p></div>`;
+        }
+
+        const maxCount = Math.max(...entries.map(([, c]) => c), 1);
+        const W = 800, H = 400;
+
+        // Equirectangular projection
+        const toXY = (lat, lng) => {
+            const x = ((lng + 180) / 360) * W;
+            const y = ((90 - lat) / 180) * H;
+            return [x, y];
+        };
+
+        let dots = '';
+        const sortedEntries = entries.sort((a, b) => a[1] - b[1]); // draw smaller on top of larger
+        sortedEntries.forEach(([country, count]) => {
+            const [lat, lng] = this._countryCoords[country];
+            const [x, y] = toXY(lat, lng);
+            const r = 4 + (count / maxCount) * 14;
+            const opacity = 0.5 + (count / maxCount) * 0.5;
+            dots += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="var(--kendo-gold)" opacity="${opacity.toFixed(2)}" class="map-dot">`;
+            dots += `<title>${UI.escapeHtml(country)}: ${count} bracket${count !== 1 ? 's' : ''}</title></circle>`;
+        });
+
+        // Build legend
+        const legend = sortedEntries.sort((a, b) => b[1] - a[1]).map(([country, count]) =>
+            `<span class="map-legend-item"><span class="map-legend-dot"></span>${UI.escapeHtml(country)} (${count})</span>`
+        ).join('');
+        const otherHtml = otherCount > 0 ? `<span class="map-legend-item"><span class="map-legend-dot" style="opacity:0.5"></span>Other (${otherCount})</span>` : '';
+
+        return `<div class="stat-section global-map-section">
+            <h3 class="stat-section-title">Global Submissions</h3>
+            <div class="global-map-wrap">
+                <svg viewBox="0 0 ${W} ${H}" class="global-map-svg" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Simplified continent outlines -->
+                    <rect width="${W}" height="${H}" fill="transparent"/>
+                    <!-- Grid lines -->
+                    <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4"/>
+                    <line x1="${W/2}" y1="0" x2="${W/2}" y2="${H}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4"/>
+                    <line x1="0" y1="${H*0.25}" x2="${W}" y2="${H*0.25}" stroke="rgba(255,255,255,0.03)" stroke-dasharray="2,6"/>
+                    <line x1="0" y1="${H*0.75}" x2="${W}" y2="${H*0.75}" stroke="rgba(255,255,255,0.03)" stroke-dasharray="2,6"/>
+                    <!-- Continent shapes (simplified) -->
+                    <path d="M120,80 Q140,70 160,75 L175,90 Q185,110 180,140 L170,170 Q165,185 155,195 L145,200 Q130,210 120,190 L110,170 Q100,150 105,130 L110,110 Q115,90 120,80Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M340,55 Q380,50 420,55 L450,60 Q480,65 500,80 L510,100 Q515,120 500,130 L480,125 Q450,115 420,120 L400,130 Q380,140 360,130 L345,110 Q335,85 340,55Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M520,65 Q560,50 620,55 L680,70 Q720,80 740,100 L750,130 Q745,150 730,170 L710,190 Q680,210 650,200 L620,210 Q580,225 560,210 L540,190 Q520,165 515,140 L510,120 Q510,90 520,65Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M350,140 Q370,135 390,145 L410,165 Q420,190 410,220 L400,260 Q385,290 370,310 L360,320 Q345,335 340,310 L335,280 Q330,250 335,220 L340,190 Q345,160 350,140Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M190,230 Q210,200 240,195 L280,200 Q320,210 340,235 L350,260 Q355,290 340,310 L310,335 Q270,360 230,345 L205,320 Q185,290 185,260 L190,230Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M600,220 Q640,200 680,215 L720,235 Q740,260 730,290 L710,310 Q680,330 650,325 L620,310 Q595,290 590,265 L595,240 Q595,225 600,220Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <path d="M690,110 Q710,95 740,100 L760,115 Q770,135 760,155 L740,165 Q720,170 705,160 L695,145 Q685,125 690,110Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>
+                    <!-- Dots -->
+                    ${dots}
+                </svg>
+            </div>
+            <div class="map-legend">${legend}${otherHtml}</div>
+        </div>`;
+    },
+
+    _buildChampionTable(title, champions, actualChampName) {
+        if (champions.length === 0 && !actualChampName) {
             return `<div class="stat-section"><h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
                 <p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">No picks yet</p></div>`;
         }
 
-        const total = champions.reduce((s, [, c]) => s + c, 0);
-        const medals = ['🥇', '🥈', '🥉'];
-        const podiumHtml = champions.slice(0, 3).map(([name, count], i) => {
-            const pct = ((count / total) * 100).toFixed(1);
-            return `<div class="podium-item podium-${i + 1}">
-                <div class="podium-medal">${medals[i]}</div>
-                <div class="podium-name">${UI.escapeHtml(name)}</div>
-                <div class="podium-stats">${count} picks (${pct}%)</div>
-            </div>`;
+        // If actual champion isn't in the list, append with 0 picks
+        let champList = [...champions];
+        if (actualChampName && !champList.some(([name]) => name === actualChampName)) {
+            champList.push([actualChampName, 0]);
+        }
+
+        const total = champList.reduce((s, [, c]) => s + c, 0);
+        const maxCount = champList.length > 0 && champList[0][1] > 0 ? champList[0][1] : 1;
+        const rows = champList.map(([name, count], i) => {
+            const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+            const barWidth = ((count / maxCount) * 100).toFixed(1);
+            const isWinner = actualChampName && name === actualChampName;
+            const winnerClass = isWinner ? ' champ-row-winner' : '';
+            const trophy = isWinner ? '<span class="champ-trophy" title="Actual Champion">&#x1f3c6;</span> ' : '';
+            return `<tr class="champ-row${winnerClass}">
+                <td class="champ-rank">${i + 1}</td>
+                <td class="champ-name">${trophy}${UI.escapeHtml(name)}</td>
+                <td class="champ-count">${count}</td>
+                <td class="champ-bar-cell"><div class="champ-bar" style="width:${barWidth}%"></div><span class="champ-pct">${pct}%</span></td>
+            </tr>`;
         }).join('');
 
         return `<div class="stat-section">
             <h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
-            <div class="podium">${podiumHtml}</div>
+            <table class="champ-table">
+                <thead><tr><th>#</th><th>Player</th><th>Picks</th><th></th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
         </div>`;
     },
 
@@ -2475,6 +2971,10 @@ const app = {
         const p2 = players.find(p => p.id === data.player2.id);
         const p1Pct = Math.round((data.player1.count / data.total) * 100);
         const p2Pct = 100 - p1Pct;
+        const goldColor = 'var(--kendo-gold)';
+        const blueColor = 'rgba(102, 126, 234, 0.8)';
+        const p1BarColor = p1Pct >= p2Pct ? goldColor : blueColor;
+        const p2BarColor = p1Pct >= p2Pct ? blueColor : goldColor;
 
         return `<div class="stat-section">
             <h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
@@ -2483,15 +2983,15 @@ const app = {
                 <div class="controversial-matchup">
                     <div class="controversial-player">
                         <span class="controversial-name">${UI.escapeHtml(p1?.name || '?')}</span>
-                        <span class="controversial-pct">${p1Pct}%</span>
+                        <span class="controversial-pct" style="color:${p1BarColor}">${p1Pct}%</span>
                     </div>
                     <div class="controversial-bar">
-                        <div class="controversial-fill-left" style="width:${p1Pct}%"></div>
-                        <div class="controversial-fill-right" style="width:${p2Pct}%"></div>
+                        <div class="controversial-fill-left" style="width:${p1Pct}%;background:${p1BarColor}"></div>
+                        <div class="controversial-fill-right" style="width:${p2Pct}%;background:${p2BarColor}"></div>
                     </div>
                     <div class="controversial-player" style="text-align:right;">
                         <span class="controversial-name">${UI.escapeHtml(p2?.name || '?')}</span>
-                        <span class="controversial-pct">${p2Pct}%</span>
+                        <span class="controversial-pct" style="color:${p2BarColor}">${p2Pct}%</span>
                     </div>
                 </div>
                 <div class="controversial-total">${data.total} total picks</div>
@@ -2608,6 +3108,7 @@ const app = {
 
     closeStatsModal() {
         document.getElementById('statsModal').style.display = 'none';
+        unlockBodyScroll();
     },
 
     // ── Bracket Similarity ──────────────────────────────────────
@@ -2767,25 +3268,48 @@ const app = {
             });
         });
 
-        // Kendo Scholar: highest accuracy in rounds 3-5 (R16, QF, SF, Finals)
-        let scholarName = '', scholarPct = 0;
-        [{ gender: 'men', results: menActualResults }, { gender: 'women', results: womenActualResults }].forEach(({ gender, results: actualResults }) => {
+        // Upset Caller: most correctly predicted upsets (lower seed beating higher seed)
+        let upsetCallerName = '', upsetCallerCount = 0;
+        [{ gender: 'men', results: menActualResults, players: this.menPlayers },
+         { gender: 'women', results: womenActualResults, players: this.womenPlayers }].forEach(({ gender, results: actualResults, players: pList }) => {
             if (!actualResults) return;
             const genderDocs = allDocs.filter(d => d.gender === gender && d.predictions);
             genderDocs.forEach(d => {
-                let correct = 0, total = 0;
-                for (let r = 2; r < 6; r++) {
+                let upsets = 0;
+                for (let r = 0; r < 6; r++) {
                     const actual = actualResults[r] || {};
                     const picks = d.predictions[r] || {};
-                    Object.keys(actual).forEach(m => {
-                        total++;
-                        if (picks[m] === actual[m]) correct++;
+                    Object.entries(actual).forEach(([m, winnerId]) => {
+                        if (picks[m] !== winnerId) return;
+                        // Determine if this was an upset: winner had higher id (lower seed)
+                        const matchIdx = Number(m);
+                        const matchSize = Math.pow(2, 6 - r);
+                        const p1Seed = matchIdx * 2;
+                        const p2Seed = matchIdx * 2 + 1;
+                        // Find who was in this match based on round 0 seeding
+                        // Simpler: higher player id = lower seed = upset if they won
+                        const loserId = this._getOpponentInMatch(d.predictions, r, matchIdx, winnerId, pList);
+                        if (loserId && winnerId > loserId) upsets++;
                     });
                 }
-                const pct = total > 0 ? correct / total : 0;
-                if (pct > scholarPct) {
-                    scholarPct = pct;
-                    scholarName = d.displayName || 'Anonymous';
+                if (upsets > upsetCallerCount) {
+                    upsetCallerCount = upsets;
+                    upsetCallerName = d.displayName || 'Anonymous';
+                }
+            });
+        });
+
+        // Oracle: correctly predicted the champion
+        const oracleNames = [];
+        [{ gender: 'men', results: menActualResults },
+         { gender: 'women', results: womenActualResults }].forEach(({ gender, results: actualResults }) => {
+            if (!actualResults || !actualResults[5] || !actualResults[5][0]) return;
+            const champId = actualResults[5][0];
+            const genderDocs = allDocs.filter(d => d.gender === gender && d.predictions);
+            genderDocs.forEach(d => {
+                if (d.predictions[5] && d.predictions[5][0] === champId) {
+                    const name = d.displayName || 'Anonymous';
+                    if (!oracleNames.includes(name)) oracleNames.push(name);
                 }
             });
         });
@@ -2812,13 +3336,23 @@ const app = {
             </div>`;
         }
 
-        // Kendo Scholar
-        if (scholarName && scholarPct > 0) {
+        // Upset Caller
+        if (upsetCallerName && upsetCallerCount > 0) {
             html += `<div class="badge-card">
-                <div class="badge-icon">🎓</div>
-                <div class="badge-title">KENDO SCHOLAR</div>
-                <div class="badge-desc">Best late-round accuracy (${Math.round(scholarPct * 100)}%)</div>
-                <div class="badge-names">${UI.escapeHtml(scholarName)}</div>
+                <div class="badge-icon">🎯</div>
+                <div class="badge-title">UPSET CALLER</div>
+                <div class="badge-desc">Most correct upset predictions (${upsetCallerCount})</div>
+                <div class="badge-names">${UI.escapeHtml(upsetCallerName)}</div>
+            </div>`;
+        }
+
+        // Oracle
+        if (oracleNames.length > 0) {
+            html += `<div class="badge-card">
+                <div class="badge-icon">🔮</div>
+                <div class="badge-title">ORACLE</div>
+                <div class="badge-desc">Correctly predicted the champion</div>
+                <div class="badge-names">${oracleNames.map(n => UI.escapeHtml(n)).join(', ')}</div>
             </div>`;
         }
 
@@ -2826,24 +3360,227 @@ const app = {
         return html;
     },
 
+    _getOpponentInMatch(predictions, round, matchIdx, winnerId, players) {
+        // For round 0, the two players are seeded: matchIdx*2 + 1 and matchIdx*2 + 2
+        if (round === 0) {
+            const p1Id = matchIdx * 2 + 1;
+            const p2Id = matchIdx * 2 + 2;
+            return winnerId === p1Id ? p2Id : p1Id;
+        }
+        // For later rounds, look at the previous round's picks that feed into this match
+        const prevRound = predictions[round - 1];
+        if (!prevRound) return null;
+        const feedMatch1 = matchIdx * 2;
+        const feedMatch2 = matchIdx * 2 + 1;
+        const p1Id = prevRound[feedMatch1];
+        const p2Id = prevRound[feedMatch2];
+        if (!p1Id || !p2Id) return null;
+        return winnerId === p1Id ? p2Id : p1Id;
+    },
+
     // ── Scoring Rules ───────────────────────────────────────────
 
     showScoringRules() {
         this._closeNav();
         document.getElementById('scoringRulesModal').style.display = 'block';
+        lockBodyScroll();
     },
 
     closeScoringRules() {
         document.getElementById('scoringRulesModal').style.display = 'none';
+        unlockBodyScroll();
+    },
+
+    // ── FAQ ─────────────────────────────────────────────────────
+
+    showFaq() {
+        this._closeNav();
+        this.currentView = 'faq';
+        this._setActiveNav('navFaq');
+        delete document.body.dataset.intensity;
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.render();
+    },
+
+    renderFaqPage() {
+        const sections = [
+            {
+                title: 'ABOUT',
+                items: [
+                    {
+                        q: 'What is Kendo?',
+                        a: 'Kendo (\u5263\u9053) is the Japanese martial art of sword fighting. Practitioners wear protective armor (bogu) and use bamboo swords (shinai) to strike designated target areas. It emphasizes discipline, respect, and the pursuit of personal development through rigorous training.'
+                    },
+                    {
+                        q: 'What is the AJKC?',
+                        a: 'The All Japan Kendo Championship (\u5168\u65e5\u672c\u5263\u9053\u9078\u624b\u6a29\u5927\u4f1a) is the most prestigious individual kendo tournament in Japan, held annually since 1953. Each prefecture sends its top representatives to compete in a single-elimination bracket. The tournament features both a men\'s and women\'s division.'
+                    },
+                    {
+                        q: 'What is AJKC Anarchy?',
+                        a: [
+                            'AJKC Anarchy is a passion project built for the kendo community. It\'s a free bracket prediction game where you pick winners for every match of the All Japan Kendo Championship and compete against fans from around the world.',
+                            'It was born from a simple obsession \u2014 the AJKC is my Super Bowl, my World Cup. I have always loved studying the matchups and trying to predict who would win it all that year. Inspired by March Madness-style brackets, I built this as a way for kendo fans everywhere to compete, connect, and share the same excitement that I do.'
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'HOW IT WORKS',
+                items: [
+                    {
+                        q: 'How do I play?',
+                        a: 'Select either the Men\'s or Women\'s bracket, then pick a winner for each matchup from the Round of 64 through the Finals. Submit your bracket before the tournament starts to lock in your picks.'
+                    },
+                    {
+                        q: 'Is it free?',
+                        a: 'Yes! AJKC Anarchy is completely free to play. No purchase or sign-up is required to fill out a bracket, though signing in helps save your picks.'
+                    },
+                    {
+                        q: 'Can I fill out both men\'s and women\'s brackets?',
+                        a: 'Yes! You can submit a bracket for both the Men\'s and Women\'s championships. They are scored independently.'
+                    },
+                    {
+                        q: 'Can I edit my bracket after submitting?',
+                        a: 'Yes, you can edit your bracket as many times as you want before the tournament starts. Once it locks, your most recent submission is final.'
+                    },
+                    {
+                        q: 'When does the bracket lock?',
+                        a: 'Brackets automatically lock when the tournament begins. After that, no edits or new submissions are accepted.'
+                    }
+                ]
+            },
+            {
+                title: 'SCORING',
+                items: [
+                    {
+                        q: 'How is scoring calculated?',
+                        a: 'Points increase each round: 1 pt (R64), 2 pts (R32), 4 pts (R16), 8 pts (QF), 16 pts (SF), 32 pts (Finals). You also earn +1 per correct pick, +5 for predicting the final ippon, and +50 for a perfect bracket.'
+                    },
+                    {
+                        q: 'What is the ippon bonus?',
+                        a: 'If you correctly predict the winning technique (men, kote, do, tsuki, or hansoku) of the final match, you earn an extra 5 points.'
+                    },
+                    {
+                        q: 'How are ties broken?',
+                        a: 'If two players have the same score, the tiebreaker goes to whoever submitted their bracket earlier.'
+                    }
+                ]
+            },
+            {
+                title: 'ACCOUNT',
+                items: [
+                    {
+                        q: 'Do I need an account?',
+                        a: 'You can fill out a bracket without an account, but signing in with Google or email ensures your bracket is saved across devices and won\'t be lost if you clear your browser data.'
+                    },
+                    {
+                        q: 'Who made this?',
+                        a: 'Just another fellow kendo nerd practicing in the USA. Check out my content on Instagram, Youtube, and TikTok! If you enjoy it, consider supporting me on the Donate page!'
+                    }
+                ]
+            }
+        ];
+
+        const html = sections.map(section => {
+            const items = section.items.map(({ q, a }) => {
+                const answerHtml = Array.isArray(a)
+                    ? a.map(p => `<p>${UI.escapeHtml(p)}</p>`).join('')
+                    : `<p>${UI.escapeHtml(a)}</p>`;
+                return `
+                <details class="faq-item">
+                    <summary class="faq-question">${UI.escapeHtml(q)}</summary>
+                    <div class="faq-answer">${answerHtml}</div>
+                </details>`;
+            }).join('');
+            return `<div class="faq-section">
+                <h2 class="faq-section-title">${UI.escapeHtml(section.title)}</h2>
+                ${items}
+            </div>`;
+        }).join('');
+
+        document.getElementById('gameContainer').innerHTML = `
+            <div class="page-view">
+                <h1 class="page-title">FREQUENTLY ASKED QUESTIONS</h1>
+                <div class="faq-list">${html}</div>
+            </div>`;
+        window.scrollTo(0, 0);
     },
 
     showDonateModal() {
+        this._closeNav();
         this.currentView = 'donate';
         this._setActiveNav('navDonate');
         delete document.body.dataset.intensity;
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
         this.render();
+    },
+
+    async showLandingStats() {
+        this.currentView = 'stats';
+        this._setActiveNav('navStats');
+        delete document.body.dataset.intensity;
+        document.getElementById('gameContainer').innerHTML = '';
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.renderStatsPage();
+        await this.checkLockStatus();
+        await this.loadActualResults();
+        await this.updateBracketCount();
+    },
+
+    async showLandingAllBrackets() {
+        this.currentView = 'allBrackets';
+        this._setActiveNav('navAllBrackets');
+        delete document.body.dataset.intensity;
+        document.getElementById('gameContainer').innerHTML = '';
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.renderAllBracketsPage();
+        await this.checkLockStatus();
+        await this.loadActualResults();
+        await this.updateBracketCount();
+    },
+
+    async showLandingMyBracket() {
+        document.querySelector('.landing-nav-links')?.classList.remove('landing-nav-open');
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.currentView = 'bracket';
+        this.viewingOtherBracket = false;
+        UI.showBackToMine(false);
+        this._setActiveNav('navMyBracket');
+        delete document.body.dataset.intensity;
+        await this.checkLockStatus();
+        await this.loadActualResults();
+        if (this.userBracketData) {
+            this.bracket = { ...this.userBracketData };
+            this.gameState = this.isBracketComplete() ? 'bracket-summary' : 'picking';
+            if (this.gameState === 'picking') this.findFirstIncompleteMatch();
+        } else {
+            this.bracket = {};
+            this.gameState = 'picking';
+            this.gameRound = 0;
+            this.gameMatch = 0;
+        }
+        this.render();
+        await this.updateBracketCount();
+    },
+
+    async showLandingLeaderboard() {
+        this.currentView = 'leaderboard';
+        this._lbGender = this.currentGender;
+        this._setActiveNav('navLeaderboard');
+        delete document.body.dataset.intensity;
+        // Render before showing to prevent flash
+        document.getElementById('gameContainer').innerHTML = '';
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.renderLeaderboardPage();
+        await this.checkLockStatus();
+        await this.loadActualResults();
+        await this.updateBracketCount();
     },
 
     closeDonateModal() {
@@ -2855,9 +3592,7 @@ const app = {
         container.innerHTML = `
             <div class="page-view donate-page">
                 <div class="donate-header">
-                    <p class="donate-label">AJKC MADNESS</p>
-                    <h1 class="donate-title">SUPPORT AJKC MADNESS</h1>
-                    <p class="donate-intro">AJKC MADNESS is a passion project built for the kendo community \u2014 a place for fans to engage with the All Japan Championships in a fun and interactive way.</p>
+                    <h1 class="donate-title">SUPPORT AJKC ANARCHY</h1>
                     <p class="donate-intro">If you\u2019ve enjoyed using the bracket or want to support future improvements, your contribution helps keep the platform running and growing.</p>
                 </div>
 
@@ -2870,11 +3605,11 @@ const app = {
                         </div>
                         <div class="donate-why-item">
                             <span class="donate-why-icon">\u2728</span>
-                            <p>Adding new features and events</p>
+                            <p>Creating more kendo related projects</p>
                         </div>
                         <div class="donate-why-item">
                             <span class="donate-why-icon">\ud83e\udd3a</span>
-                            <p>Supporting future kendo-related projects</p>
+                            <p>Supporting my kendo training and competitions</p>
                         </div>
                     </div>
                 </div>
@@ -2882,30 +3617,63 @@ const app = {
                 <div class="donate-tiers">
                     <h2 class="donate-tiers-title">Choose Your Support</h2>
                     <div class="donate-tiers-grid">
-                        <div class="donate-tier">
+                        <div class="donate-tier" onclick="app._selectDonateTier(3)">
                             <div class="donate-tier-amount">$3</div>
-                            <p class="donate-tier-desc">Buy us a coffee and help keep the lights on.</p>
+                            <div class="donate-tier-btns">
+                                <a href="https://paypal.me/BettyPark259/3" target="_blank" rel="noopener" class="donate-tier-link" onclick="event.stopPropagation()">PAYPAL</a>
+                                <a href="https://venmo.com/bparkyy?txn=pay&amount=3&note=AJKC+Anarchy" target="_blank" rel="noopener" class="donate-tier-link donate-tier-link-gold" onclick="event.stopPropagation()">VENMO</a>
+                            </div>
                         </div>
-                        <div class="donate-tier donate-tier-featured">
+                        <div class="donate-tier donate-tier-featured" onclick="app._selectDonateTier(10)">
                             <div class="donate-tier-badge">MOST POPULAR</div>
                             <div class="donate-tier-amount">$10</div>
-                            <p class="donate-tier-desc">Help fund new features and improvements for the community.</p>
+                            <div class="donate-tier-btns">
+                                <a href="https://paypal.me/BettyPark259/10" target="_blank" rel="noopener" class="donate-tier-link" onclick="event.stopPropagation()">PAYPAL</a>
+                                <a href="https://venmo.com/bparkyy?txn=pay&amount=10&note=AJKC+Anarchy" target="_blank" rel="noopener" class="donate-tier-link donate-tier-link-gold" onclick="event.stopPropagation()">VENMO</a>
+                            </div>
                         </div>
-                        <div class="donate-tier">
+                        <div class="donate-tier" onclick="app._selectDonateTier(25)">
                             <div class="donate-tier-amount">$25</div>
-                            <p class="donate-tier-desc">Make a real impact on the future of kendo fan experiences.</p>
+                            <div class="donate-tier-btns">
+                                <a href="https://paypal.me/BettyPark259/25" target="_blank" rel="noopener" class="donate-tier-link" onclick="event.stopPropagation()">PAYPAL</a>
+                                <a href="https://venmo.com/bparkyy?txn=pay&amount=25&note=AJKC+Anarchy" target="_blank" rel="noopener" class="donate-tier-link donate-tier-link-gold" onclick="event.stopPropagation()">VENMO</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="donate-custom">
+                        <p class="donate-custom-label">OR ENTER CUSTOM AMOUNT</p>
+                        <div class="donate-custom-row">
+                            <div class="donate-custom-input-wrap">
+                                <span class="donate-custom-dollar">$</span>
+                                <input type="number" id="donateCustomAmount" class="donate-custom-input" placeholder="0" min="1" step="1" />
+                            </div>
+                            <a id="donateCustomPaypal" href="https://paypal.me/BettyPark259" target="_blank" rel="noopener" class="donate-tier-link" onclick="app._updateCustomLinks()">PAYPAL</a>
+                            <a id="donateCustomVenmo" href="https://venmo.com/bparkyy" target="_blank" rel="noopener" class="donate-tier-link donate-tier-link-gold" onclick="app._updateCustomLinks()">VENMO</a>
                         </div>
                     </div>
                 </div>
 
-                <div class="donate-actions">
-                    <a href="https://paypal.me/BettyPark259" class="donate-action-btn" target="_blank" rel="noopener">DONATE VIA PAYPAL</a>
-                    <a href="https://venmo.com/bparkyy" class="donate-action-btn donate-action-btn-gold" target="_blank" rel="noopener">DONATE VIA VENMO</a>
-                </div>
-
                 <p class="donate-thanks">Thank you for being part of this \ud83d\ude4f</p>
             </div>`;
+        // Update custom links when amount changes
+        const input = document.getElementById('donateCustomAmount');
+        if (input) {
+            input.addEventListener('input', () => this._updateCustomLinks());
+        }
         window.scrollTo(0, 0);
+    },
+
+    _selectDonateTier(amount) {
+        // Visual feedback — could expand in the future
+    },
+
+    _updateCustomLinks() {
+        const input = document.getElementById('donateCustomAmount');
+        const amount = parseInt(input?.value) || '';
+        const ppLink = document.getElementById('donateCustomPaypal');
+        const vmLink = document.getElementById('donateCustomVenmo');
+        if (ppLink) ppLink.href = amount ? `https://paypal.me/BettyPark259/${amount}` : 'https://paypal.me/BettyPark259';
+        if (vmLink) vmLink.href = amount ? `https://venmo.com/bparkyy?txn=pay&amount=${amount}&note=AJKC+Anarchy` : 'https://venmo.com/bparkyy';
     },
 
     // ── Odds toggle ───────────────────────────────────────────
@@ -2949,7 +3717,7 @@ app.init();
 
 // Warn before closing tab if unsaved picks
 window.addEventListener('beforeunload', (e) => {
-    if (app.hasAnyPicks() && !app.userBracketData) {
+    if (!app.viewingOtherBracket && app.hasAnyPicks() && !app.userBracketData) {
         e.preventDefault();
         e.returnValue = '';
     }
