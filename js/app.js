@@ -296,14 +296,17 @@ const app = {
         } catch (e) { console.error('Landing stats error:', e); }
     },
 
-    enterBracket(gender) {
+    async enterBracket(gender) {
         // Hide landing, show app
         document.getElementById('landingPage').style.display = 'none';
+        // Clear stale content before showing
+        const gameArea = document.getElementById('gameArea');
+        if (gameArea) gameArea.innerHTML = '';
         document.getElementById('mainApp').style.display = 'block';
         this.currentView = 'bracket';
         this.gameState = 'picking';
 
-        this.switchGender(gender);
+        await this.switchGender(gender);
     },
 
     goHome() {
@@ -1528,6 +1531,7 @@ const app = {
         if (this.currentView === 'legal') { this.renderLegalPage(); return; }
         if (this.currentView === 'donate') { this.renderDonatePage(); return; }
         if (this.currentView === 'faq') { this.renderFaqPage(); return; }
+        if (this.currentView === 'liveBracket') { this.renderLiveBracketPage(); return; }
 
         // Set round intensity on body for progressive atmosphere
         if (this.gameState === 'picking') {
@@ -2657,6 +2661,116 @@ const app = {
                 </div>
             </div>`;
         window.scrollTo(0, 0);
+    },
+
+    // ── Live Bracket ─────────────────────────────────────────
+
+    _liveBracketGender: 'men',
+
+    showLiveBracket() {
+        if (this._warnIfPicking()) return;
+        this._closeNav();
+        this._liveBracketGender = this.currentGender;
+        this.currentView = 'liveBracket';
+        this._setActiveNav('navLiveBracket');
+        delete document.body.dataset.intensity;
+        this.render();
+    },
+
+    async showLandingLiveBracket() {
+        this.currentView = 'liveBracket';
+        this._liveBracketGender = 'men';
+        this._setActiveNav('navLiveBracket');
+        delete document.body.dataset.intensity;
+        document.getElementById('gameContainer').innerHTML = '';
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        this.render();
+    },
+
+    async _loadLiveResults(gender) {
+        try {
+            const doc = await db.collection('actualResults-' + gender).doc('current').get();
+            return doc.exists ? (doc.data().predictions || {}) : {};
+        } catch (e) {
+            console.error('Error loading live results:', e);
+            return {};
+        }
+    },
+
+    async renderLiveBracketPage() {
+        const container = document.getElementById('gameContainer');
+        const gender = this._liveBracketGender;
+        document.body.className = gender === 'women' ? 'women' : '';
+
+        container.innerHTML = `
+            <div class="page-view live-bracket-page">
+                <h1 class="page-title">LIVE BRACKET</h1>
+                <p class="live-bracket-subtitle">Official tournament results updated in real time</p>
+                <div class="live-bracket-gender-tabs">
+                    <button class="live-gender-tab ${gender === 'men' ? 'active' : ''}" data-gender="men" onclick="app._switchLiveGender('men')">MEN</button>
+                    <button class="live-gender-tab ${gender === 'women' ? 'active' : ''}" data-gender="women" onclick="app._switchLiveGender('women')">WOMEN</button>
+                </div>
+                <div id="liveBracketContent">
+                    <div class="skeleton skeleton-bracket" style="height:300px;border-radius:12px;"></div>
+                </div>
+            </div>`;
+
+        const results = await this._loadLiveResults(gender);
+        const players = gender === 'men' ? this.menPlayers : this.womenPlayers;
+
+        // Build the bracket HTML using the actual results as bracket data
+        const savedBracket = this.bracket;
+        const savedPlayers = this.players;
+        const savedActual = this.actualResults;
+        const savedAdmin = this.adminMode;
+
+        this.bracket = results;
+        this.players = players;
+        this.actualResults = null; // no correct/incorrect highlighting
+        this.adminMode = false;
+
+        const bracketHtml = this.buildBracketHTML(false);
+
+        // Restore state
+        this.bracket = savedBracket;
+        this.players = savedPlayers;
+        this.actualResults = savedActual;
+        this.adminMode = savedAdmin;
+
+        // Count completed rounds
+        let totalPicked = 0;
+        for (let r = 0; r < 6; r++) {
+            totalPicked += Object.keys(results[r] || {}).length;
+        }
+
+        // Find champion
+        const championId = results[5]?.[0];
+        const champion = championId ? players.find(p => p.id === championId) : null;
+
+        const statusHtml = champion
+            ? `<div class="live-champion-banner">🏆 Champion: ${UI.escapeHtml(champion.name)}</div>`
+            : totalPicked > 0
+                ? `<div class="live-progress-info">${totalPicked} of 63 results entered</div>`
+                : `<div class="live-progress-info">No results yet — check back once the tournament begins!</div>`;
+
+        const contentEl = document.getElementById('liveBracketContent');
+        if (contentEl) {
+            contentEl.innerHTML = `
+                ${statusHtml}
+                <div class="bracket-tree-wrapper">
+                    <div class="bracket-visual-area" id="liveBracketVisualArea">
+                        ${bracketHtml}
+                    </div>
+                </div>`;
+            this.scheduleBracketRedraw();
+        }
+    },
+
+    _switchLiveGender(gender) {
+        this._liveBracketGender = gender;
+        document.body.className = gender === 'women' ? 'women' : '';
+        this.renderLiveBracketPage();
     },
 
     // ── Stats Dashboard ────────────────────────────────────────

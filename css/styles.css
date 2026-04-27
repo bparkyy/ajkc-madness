@@ -3237,7 +3237,7 @@ body.women .winner-chip {
 .bracket-half-left,
 .bracket-half-right {
     display: flex;
-    flex: 1;
+    flex: 5;
 }
 
 .br {
@@ -3267,6 +3267,7 @@ body.women .winner-chip {
 }
 
 .br-final {
+    flex: 1;
     min-width: 80px;
 }
 
@@ -4363,6 +4364,94 @@ select.submit-name-input option {
     align-items: center;
     justify-content: center;
 }
+
+/* ── Live Bracket Page ────────────────────────────────────── */
+
+.live-bracket-subtitle {
+    text-align: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.95em;
+    margin: -0.5em 0 1.2em;
+}
+
+.live-bracket-gender-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 1.5em;
+}
+
+.live-gender-tab {
+    padding: 8px 28px;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(255,255,255,0.6);
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1em;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.live-gender-tab[data-gender="men"]:hover {
+    border-color: #667eea;
+    color: white;
+}
+
+.live-gender-tab[data-gender="women"]:hover {
+    border-color: #ec4899;
+    color: white;
+}
+
+.live-gender-tab[data-gender="men"].active {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+}
+
+.live-gender-tab[data-gender="women"].active {
+    background: #ec4899;
+    border-color: #ec4899;
+    color: white;
+}
+
+.live-champion-banner {
+    text-align: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6em;
+    letter-spacing: 2px;
+    color: var(--kendo-gold);
+    background: rgba(212,168,67,0.08);
+    border: 1px solid rgba(212,168,67,0.2);
+    border-radius: 12px;
+    padding: 16px 24px;
+    margin-bottom: 1.5em;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.live-progress-info {
+    text-align: center;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.95em;
+    margin-bottom: 1.5em;
+    padding: 12px 20px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+}
+
+.live-bracket-page {
+    max-width: 1400px;
+}
+
+.live-bracket-page .bracket-tree-wrapper {
+    max-width: 100%;
+    overflow: visible;
+}
+
+
 
 .ad-slot:empty::after {
     content: 'AD SPACE';
