@@ -1,3 +1,15 @@
+<!--
+  AJKC ANARCHY — All Japan Kendo Championship Bracket Challenge
+  ──────────────────────────────────────────────────────────────
+  Single-page app structure:
+    1. Landing Page (#landingPage) — hero, countdown, video, how-to-play
+    2. Main App (#mainApp) — header, nav, game container, bracket container
+    3. Sponsor Banner — appears above footer on both views
+    4. Footer — social links, legal links
+    5. Modals — scoring rules, sign-in
+    6. Toast container, offline banner
+    7. Scripts — Firebase SDK, app code (loaded at end of body)
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,7 +35,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Lexend:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=2">
+    <link rel="stylesheet" href="css/styles.css?v=3">
 </head>
 <body>
     <!-- ══════ Landing Page ══════ -->
@@ -53,7 +65,7 @@
             <section class="landing-hero">
                 <div class="landing-badge">THE 74TH ALL JAPAN KENDO CHAMPIONSHIP | THE 65TH ALL JAPAN WOMENS KENDO CHAMPIONSHIP<br><span style="opacity:0.6;font-size:0.85em;">第74回全日本剣道選手権大会 | 第65回全日本女子剣道選手権大会</span></div>
                 <h1 class="landing-title">AJKC<br><span class="landing-accent">ANARCHY</span></h1>
-                <div class="presented-by">presented by <span class="presented-sponsor">Your Sponsor Here</span></div>
+                <div class="presented-by">presented by <span class="presented-sponsor">Jayeunnie</span><span class="presented-by"> & </span><span class="presented-sponsor">Hokubei Budogu</span></div>
 
                 <div class="landing-countdown" id="countdown">
                     <div class="countdown-label">Tournament begins in</div>
@@ -109,7 +121,6 @@
                     </div>
                 </div>
             </section>
-
         </div>
 
     </div>
@@ -124,12 +135,12 @@
             <button class="mobile-menu-btn" onclick="document.querySelector('.app-nav').classList.toggle('nav-open')">☰</button>
             <nav class="app-nav">
                 <button class="nav-link active" id="navMyBracket" onclick="app.viewMyBracket()">MY BRACKET</button>
+                <button class="nav-link" id="navFaq" onclick="app.showFaq()">FAQ</button>
+                <button class="nav-link" id="navLiveBracket" onclick="app.showLiveBracket()">LIVE BRACKET</button>
+                <button class="nav-link" id="navAllBrackets" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
                 <button class="nav-link" id="navLeaderboard" onclick="app.showLeaderboard()">LEADERBOARD</button>
                 <button class="nav-link" id="navStats" onclick="app.showStats()">STATS</button>
-                <button class="nav-link" id="navLiveBracket" onclick="app.showLiveBracket()">LIVE BRACKET</button>
                 <button class="nav-link" onclick="app.showScoringRules()">RULES</button>
-                <button class="nav-link" id="navFaq" onclick="app.showFaq()">FAQ</button>
-                <button class="nav-link" id="navAllBrackets" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
                 <button class="nav-link nav-donate" id="navDonate" onclick="app.showDonateModal()">DONATE</button>
             </nav>
             <div class="app-header-right">
@@ -178,6 +189,16 @@
         </div>
 
         <div class="leaderboard" id="leaderboard" style="display: none;"></div>
+    </div>
+
+    <!-- Sponsor Banner -->
+    <div class="sponsor-banner">
+        <a href="https://hokubeibudogu.com" target="_blank" rel="noopener">
+            <picture>
+                <source media="(max-width: 600px)" srcset="images/sponsor-banner-mobile.png">
+                <img src="images/sponsor-banner.png" alt="Sponsor" />
+            </picture>
+        </a>
     </div>
 
     <!-- Footer (visible on all pages) -->
@@ -272,9 +293,9 @@
     <!-- Offline banner -->
     <div id="offlineBanner" class="offline-banner">You're offline \u2014 changes will sync when reconnected</div>
 
-    <script src="js/firebase-config.js?v=2"></script>
-    <script src="js/data.js?v=2"></script>
-    <script src="js/ui.js?v=2"></script>
-    <script src="js/app.js?v=2"></script>
+    <script src="js/firebase-config.js?v=3"></script>
+    <script src="js/data.js?v=3"></script>
+    <script src="js/ui.js?v=3"></script>
+    <script src="js/app.js?v=3"></script>
 </body>
 </html>

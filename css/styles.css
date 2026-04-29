@@ -1,13 +1,59 @@
-:root {
-    /* Men's color scheme (blue/purple) */
-    --primary: #667eea;
-    --secondary: #764ba2;
-    --accent: #5568d3;
+/*
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║  AJKC ANARCHY — Stylesheet                                     ║
+ * ╚══════════════════════════════════════════════════════════════════╝
+ *
+ * COLOR SYSTEM
+ * ────────────
+ * Men's bracket uses gold tones. Women's bracket uses deep red.
+ * body.women class swaps --primary/--secondary/--accent to red values.
+ * Most UI elements use 30% opacity versions of these colors
+ * for a semi-transparent, muted look (e.g., rgba(212,168,67,0.3)).
+ *
+ *   Gold:  #d4a843 (men's --primary)
+ *   Red:   #cc3333 (women's --primary)
+ *   Dark:  #0d1017 (--kendo-dark, page background)
+ *   Gold accent: #d4a843 (--kendo-gold, used for highlights/CTAs)
+ *
+ * SURFACE LAYERS
+ * ──────────────
+ *   --surface-1: #141821 (cards, containers)
+ *   --surface-2: #1a1f2e (inner panels, inputs)
+ *   --surface-3: #222838 (hover states, fallback avatars)
+ *
+ * SECTION INDEX
+ * ─────────────
+ *   :root variables ............... Line 33
+ *   Reset & body .................. Line 55
+ *   Landing page .................. Line 70
+ *   App header & nav .............. Line 580
+ *   Modals ........................ Line 870
+ *   All brackets list ............. Line 1280
+ *   Stats dashboard ............... Line 1460
+ *   Game screen (picking) ......... Line 2050
+ *   Player cards .................. Line 2400
+ *   Round tabs .................... Line 2330
+ *   Bracket tree (NCAA-style) ..... Line 3200
+ *   Bracket summary ............... Line 2800
+ *   Leaderboard ................... Line 3500
+ *   Legal page .................... Line 4100
+ *   Live bracket .................. Line 4430
+ *   Sponsor banner ................ Line 4265
+ *   Footer ........................ Line 4300
+ *   Mobile breakpoints ............ Line 4550
+ *   Accessibility / touch ......... Line 4800
+ */
 
-    /* Women's color scheme (pink/rose) */
-    --women-primary: #ec4899;
-    --women-secondary: #be185d;
-    --women-accent: #db2777;
+:root {
+    /* Men's color scheme (gold) */
+    --primary: #d4a843;
+    --secondary: #b8922e;
+    --accent: #c49a3a;
+
+    /* Women's color scheme (vivid red) */
+    --women-primary: #cc3333;
+    --women-secondary: #a82a2a;
+    --women-accent: #b52f2f;
 
     /* Landing page */
     --kendo-red: #c0392b;
@@ -267,13 +313,8 @@ body.women {
 }
 
 .landing-btn.women {
-    background: transparent;
-    border: 1.5px solid rgba(255,255,255,0.25);
-    color: rgba(255,255,255,0.8);
-}
-
-.landing-btn.women:hover {
-    border-color: rgba(255,255,255,0.5);
+    background: #cc3333;
+    border: 1.5px solid #cc3333;
     color: white;
 }
 
@@ -895,8 +936,8 @@ button.danger:hover {
 }
 
 .player.selected {
-    background: var(--primary);
-    color: white;
+    background: rgba(212, 168, 67, 0.3);
+    color: var(--kendo-gold);
     font-weight: 600;
 }
 
@@ -919,7 +960,7 @@ button.danger:hover {
 }
 
 .player.readonly.selected:hover {
-    background: var(--primary);
+    background: rgba(212, 168, 67, 0.3);
 }
 
 .player-name {
@@ -1322,8 +1363,10 @@ button.danger:hover {
 
 .ab-name-wrap {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
 }
 
 .ab-you-label {
@@ -1334,26 +1377,32 @@ button.danger:hover {
 }
 
 .ab-gender-badge {
-    display: none;
+    display: inline-block;
+    font-size: 0.65em;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    vertical-align: middle;
 }
 
 .ab-gender-men {
-    background: rgba(59, 130, 246, 0.15);
-    color: rgba(59, 130, 246, 0.8);
-    border: 2px solid rgba(59, 130, 246, 0.35);
+    background: rgba(212, 168, 67, 0.15);
+    color: rgba(212, 168, 67, 0.8);
+    border: 2px solid rgba(212, 168, 67, 0.35);
 }
 
 .ab-gender-women {
-    background: rgba(236, 72, 153, 0.15);
-    color: rgba(236, 72, 153, 0.8);
-    border: 2px solid rgba(236, 72, 153, 0.35);
+    background: rgba(204, 51, 51, 0.15);
+    color: rgba(204, 51, 51, 0.8);
+    border: 2px solid rgba(204, 51, 51, 0.35);
 }
-.ab-row-men { border-color: rgba(59, 130, 246, 0.3); }
-.ab-row-women { border-color: rgba(236, 72, 153, 0.3); }
-.ab-row-men:hover { border-color: rgba(59, 130, 246, 0.5); }
-.ab-row-women:hover { border-color: rgba(236, 72, 153, 0.5); }
-.ab-row-you.ab-row-men { border-color: rgba(59, 130, 246, 0.5); }
-.ab-row-you.ab-row-women { border-color: rgba(236, 72, 153, 0.5); }
+.ab-row-men { border-color: rgba(212, 168, 67, 0.3); }
+.ab-row-women { border-color: rgba(204, 51, 51, 0.3); }
+.ab-row-men:hover { border-color: rgba(212, 168, 67, 0.5); }
+.ab-row-women:hover { border-color: rgba(204, 51, 51, 0.5); }
+.ab-row-you.ab-row-men { border-color: rgba(212, 168, 67, 0.5); }
+.ab-row-you.ab-row-women { border-color: rgba(204, 51, 51, 0.5); }
 
 .ab-name {
     font-weight: 600;
@@ -1407,6 +1456,18 @@ button.danger:hover {
 
 .ab-row:hover .ab-view {
     text-decoration: underline;
+}
+
+.ab-container {
+    max-width: 33vw;
+    margin: 0 auto 16px;
+    position: relative;
+}
+
+@media (max-width: 600px) {
+    .ab-container {
+        max-width: 100%;
+    }
 }
 
 .bracket-list {
@@ -1966,7 +2027,7 @@ button.danger:hover {
 
 .nav-signin {
     color: var(--kendo-gold) !important;
-    border: 1px solid var(--kendo-gold) !important;
+    border: none !important;
     padding: 6px 16px !important;
     border-radius: 4px;
     margin-left: 8px;
@@ -1978,7 +2039,6 @@ button.danger:hover {
 
 .nav-signin:hover {
     color: rgba(255,255,255,0.8) !important;
-    border-color: rgba(255,255,255,0.3) !important;
 }
 
 .nav-icon-btn:hover {
@@ -2204,10 +2264,14 @@ body[data-intensity="5"] .game-container::before {
 .splash-line {
     width: 80px;
     height: 3px;
-    background: var(--primary);
+    background: rgba(212, 168, 67, 0.5);
     margin-top: 20px;
     border-radius: 2px;
     animation: splashLine 0.6s ease 0.6s both;
+}
+
+body.women .splash-line {
+    background: rgba(204, 51, 51, 0.5);
 }
 
 @keyframes splashText {
@@ -2311,8 +2375,15 @@ body[data-intensity="5"] .game-container::before {
 }
 
 .round-tab.active {
-    background: var(--primary);
-    color: white;
+    background: rgba(212, 168, 67, 0.3);
+    color: var(--kendo-gold);
+    border: 1px solid rgba(212, 168, 67, 0.5);
+}
+
+body.women .round-tab.active {
+    background: rgba(204, 51, 51, 0.3);
+    color: #e06060;
+    border: 1px solid rgba(204, 51, 51, 0.5);
 }
 
 .round-tab:disabled {
@@ -2351,9 +2422,13 @@ body[data-intensity="5"] .game-container::before {
 
 .game-progress-fill {
     height: 100%;
-    background: var(--primary);
+    background: rgba(212, 168, 67, 0.5);
     border-radius: 4px;
     transition: width 0.4s ease;
+}
+
+body.women .game-progress-fill {
+    background: rgba(204, 51, 51, 0.5);
 }
 
 /* ── Player Cards ── */
@@ -2490,14 +2565,16 @@ body[data-intensity="5"] .game-container::before {
 
 .player-card.picked {
     border-color: var(--primary);
-    background: var(--primary);
-    color: white;
+    background: rgba(212, 168, 67, 0.25);
+    color: var(--kendo-gold);
     transform: scale(1.03);
-    box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 8px 30px rgba(212, 168, 67, 0.3);
 }
 
 body.women .player-card.picked {
-    box-shadow: 0 8px 30px rgba(236, 72, 153, 0.4);
+    background: rgba(204, 51, 51, 0.25);
+    color: #e06060;
+    box-shadow: 0 8px 30px rgba(204, 51, 51, 0.3);
 }
 
 .player-card.disabled {
@@ -2611,9 +2688,13 @@ body.women .player-card.picked {
 }
 
 .crowd-fill-left {
-    background: var(--primary);
+    background: rgba(212, 168, 67, 0.5);
     border-radius: 4px 0 0 4px;
     transition: width 0.3s;
+}
+
+body.women .crowd-fill-left {
+    background: rgba(204, 51, 51, 0.5);
 }
 
 .crowd-fill-right {
@@ -2686,8 +2767,13 @@ body.women .player-card.picked {
 }
 
 .game-nav button:hover:not(:disabled) {
-    background: var(--primary);
-    color: white;
+    background: rgba(212, 168, 67, 0.2);
+    color: var(--kendo-gold);
+}
+
+body.women .game-nav button:hover:not(:disabled) {
+    background: rgba(204, 51, 51, 0.2);
+    color: #e06060;
 }
 
 .game-nav button:disabled {
@@ -2765,8 +2851,8 @@ body.women .player-card.picked {
 }
 
 body.women .winner-chip {
-    background: rgba(236, 72, 153, 0.15);
-    border-color: rgba(236, 72, 153, 0.3);
+    background: rgba(204, 51, 51, 0.15);
+    border-color: rgba(204, 51, 51, 0.3);
 }
 
 @keyframes chipIn {
@@ -2904,6 +2990,11 @@ body.women .winner-chip {
     border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
+.picking-gender-tabs {
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
 .bracket-gender-tab {
     padding: 10px 20px;
     font-family: 'Bebas Neue', sans-serif;
@@ -2922,8 +3013,8 @@ body.women .winner-chip {
 }
 
 .bracket-gender-tab.active {
-    color: var(--kendo-gold);
-    border-bottom-color: var(--kendo-gold);
+    color: var(--primary);
+    border-bottom-color: var(--primary);
 }
 
 /* Name row (side by side) */
@@ -3365,9 +3456,26 @@ body.women .winner-chip {
 }
 
 .bp.selected {
-    background: var(--primary);
-    color: white;
+    background: rgba(212, 168, 67, 0.3);
+    color: var(--kendo-gold);
     font-weight: 600;
+}
+
+body.women .bp.selected {
+    background: rgba(204, 51, 51, 0.3);
+    color: #e06060;
+}
+
+.live-bracket-page .bp.selected,
+.viewing-other .bp.selected {
+    background: rgba(212, 168, 67, 0.3);
+    color: var(--kendo-gold);
+}
+
+body.women .live-bracket-page .bp.selected,
+body.women .viewing-other .bp.selected {
+    background: rgba(204, 51, 51, 0.3);
+    color: #e06060;
 }
 
 .bp.correct {
@@ -4068,6 +4176,8 @@ select.submit-name-input option {
     font-size: 0.85em;
     line-height: 1.6;
     max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
 }
 
 .legal-meta {
@@ -4252,12 +4362,39 @@ select.submit-name-input option {
     color: var(--kendo-dark);
 }
 
+/* ── Sponsor Banner ── */
+.sponsor-banner {
+    width: 100%;
+    text-align: center;
+    background: var(--kendo-dark);
+    padding: 24px 16px;
+    margin-top: 60px;
+}
+
+.sponsor-banner.landing-sponsor {
+    margin-top: 40px;
+}
+
+.sponsor-banner a {
+    display: inline-block;
+    max-width: 728px;
+    width: 100%;
+}
+
+.sponsor-banner img {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    border-radius: 4px;
+}
+
 /* ── Footer ── */
 .site-footer {
     position: relative;
     z-index: 1;
     padding: 40px 24px 0;
-    margin-top: 60px;
+    margin-top: 0;
 }
 
 .footer-content {
@@ -4395,25 +4532,25 @@ select.submit-name-input option {
 }
 
 .live-gender-tab[data-gender="men"]:hover {
-    border-color: #667eea;
+    border-color: #d4a843;
     color: white;
 }
 
 .live-gender-tab[data-gender="women"]:hover {
-    border-color: #ec4899;
+    border-color: #cc3333;
     color: white;
 }
 
 .live-gender-tab[data-gender="men"].active {
-    background: #667eea;
-    border-color: #667eea;
-    color: white;
+    background: rgba(212, 168, 67, 0.3);
+    border-color: #d4a843;
+    color: var(--kendo-gold);
 }
 
 .live-gender-tab[data-gender="women"].active {
-    background: #ec4899;
-    border-color: #ec4899;
-    color: white;
+    background: rgba(204, 51, 51, 0.3);
+    border-color: #cc3333;
+    color: #e06060;
 }
 
 .live-champion-banner {

@@ -1,10 +1,87 @@
-// Main application logic
+/**
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║  AJKC ANARCHY — Main Application Logic                         ║
+ * ║  All Japan Kendo Championship Bracket Prediction Game           ║
+ * ╚══════════════════════════════════════════════════════════════════╝
+ *
+ * ARCHITECTURE OVERVIEW
+ * ─────────────────────
+ * Single-page app with two main screens:
+ *   1. Landing Page (#landingPage) — hero, countdown, how-to-play
+ *   2. Main App (#mainApp) — bracket picking, leaderboard, stats, etc.
+ *
+ * The app object is a singleton that manages all state and rendering.
+ * Views are swapped by setting `currentView` and calling `render()`.
+ * Firebase Firestore is used for persistence (brackets, results, settings).
+ * Firebase Auth handles anonymous + Google + email link authentication.
+ *
+ * STATE MACHINE (bracket game flow)
+ * ─────────────────────────────────
+ *   picking → round-summary → picking → ... → round-summary
+ *     → post-finals-login → post-finals-submit → post-finals-thanks
+ *     → bracket-summary
+ *
+ * NAVIGATION (currentView)
+ * ────────────────────────
+ *   'bracket'      — My bracket (picking or summary)
+ *   'leaderboard'  — Ranked bracket scores
+ *   'stats'        — Tournament-wide statistics
+ *   'allBrackets'  — Searchable list of all submissions
+ *   'liveBracket'  — Official tournament results bracket
+ *   'faq'          — Frequently asked questions
+ *   'donate'       — Support/donate page
+ *   'legal'        — Privacy policy & terms of service
+ *
+ * ASYNC RACE CONDITION GUARD (_navGen)
+ * ────────────────────────────────────
+ * Many methods are async (Firebase reads). If the user navigates away
+ * before a read completes, the stale callback could overwrite the new
+ * page. `_navGen` is incremented on every navigation; async methods
+ * capture it at start and bail if it changed before rendering.
+ *
+ * COLOR SYSTEM
+ * ────────────
+ * Men's bracket: gold (#d4a843) — set via --primary CSS variable
+ * Women's bracket: red (#cc3333) — swapped via body.women class
+ * All UI elements use semi-transparent versions (30% opacity) of these
+ * colors for a consistent, muted aesthetic.
+ *
+ * FIRESTORE COLLECTIONS
+ * ─────────────────────
+ *   brackets-men/{uid}      — User bracket predictions (men's)
+ *   brackets-women/{uid}    — User bracket predictions (women's)
+ *   actualResults-men/current — Official tournament results (men's)
+ *   actualResults-women/current — Official tournament results (women's)
+ *   settings/tournament     — Lock status
+ *   settings/actualTechnique-{gender} — Final ippon technique
+ *   admins/{email}          — Admin whitelist
+ *
+ * BRACKET DATA STRUCTURE
+ * ──────────────────────
+ *   bracket = {
+ *     0: { 0: playerId, 1: playerId, ... },  // Round of 64 (32 matches)
+ *     1: { 0: playerId, 1: playerId, ... },  // Round of 32 (16 matches)
+ *     ...
+ *     5: { 0: playerId }                      // Finals (1 match)
+ *   }
+ *
+ * FILES
+ * ─────
+ *   app.js            — This file: app logic, state, rendering, Firebase
+ *   ui.js             — HTML template rendering (card matchup, bracket summary)
+ *   data.js           — Player data arrays (menPlayersData, womenPlayersData)
+ *   firebase-config.js — Firebase initialization
+ *   styles.css        — All styling (dark theme, responsive, animations)
+ *   index.html        — DOM structure (landing page, main app, modals)
+ */
 
+// Round name constants used throughout the app
 const ROUND_NAMES = ['Round of 64', 'Round of 32', 'Round of 16', 'Quarterfinals', 'Semifinals', 'Finals'];
 const ROUND_NAMES_SHORT = ['R64', 'R32', 'R16', 'QF', 'SF', 'F'];
 const ROUND_NAMES_JP = ['1回戦', '2回戦', '3回戦', '準々決勝', '準決勝', '決勝'];
-const ROUND_INTENSITY = [0, 0.15, 0.3, 0.5, 0.75, 1.0]; // 0 = calm, 1 = max drama
+const ROUND_INTENSITY = [0, 0.15, 0.3, 0.5, 0.75, 1.0]; // Progressive atmosphere intensity per round
 
+/** Display a toast notification. Types: 'info', 'success', 'error' */
 function showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
     if (!container) { console.log(message); return; }
@@ -19,7 +96,12 @@ function showToast(message, type = 'info') {
 function lockBodyScroll() { document.body.classList.add('modal-open'); }
 function unlockBodyScroll() { document.body.classList.remove('modal-open'); }
 
-// ── Bracket pinch-to-zoom ───────────────────────────────────
+/**
+ * Bracket pinch-to-zoom handler for mobile devices.
+ * Adds two-finger zoom, single-finger pan, and +/-/reset buttons.
+ * Attaches to the .bracket-tree-wrapper element.
+ * Sets wrapper._isManualZoom flag so the resize watcher can skip auto-scaling.
+ */
 function initBracketPinchZoom(wrapper) {
     if (!wrapper || wrapper._pinchInited) return;
     wrapper._pinchInited = true;
@@ -138,34 +220,51 @@ function initBracketPinchZoom(wrapper) {
 }
 
 const app = {
-    players: [],
-    menPlayers: [],
-    womenPlayers: [],
-    bracket: {},
-    userBracketData: null,
-    adminMode: false,
-    isAdmin: false,
-    currentUser: null,
-    actualResults: null,
-    isLocked: false,
-    championChart: null,
-    currentGender: 'men',
-    viewingOtherBracket: false,
-    _viewingBracketName: '',
-    _pickHistory: [],
+    // ── Player & bracket data ───────────────────────────────────
+    players: [],              // Active player list (points to menPlayers or womenPlayers)
+    menPlayers: [],           // Men's player array with IDs, built from data.js
+    womenPlayers: [],         // Women's player array with IDs, built from data.js
+    bracket: {},              // Current bracket picks: { round: { matchIndex: playerId } }
+    userBracketData: null,    // Saved bracket from Firestore (null if no submission yet)
+    actualResults: null,      // Official tournament results (null until admin enters them)
 
-    // Game flow state
-    gameState: 'picking',   // 'picking' | 'round-summary' | 'bracket-summary'
-    currentView: 'bracket', // 'bracket' | 'leaderboard' | 'stats' | 'allBrackets'
-    gameRound: 0,
-    gameMatch: 0,
-    _advanceTimeout: null,
+    // ── Auth & admin ────────────────────────────────────────────
+    currentUser: null,        // Firebase auth user object
+    isAdmin: false,           // Whether current user is in the admins collection
+    adminMode: false,         // Admin editing mode toggle
+
+    // ── UI state ────────────────────────────────────────────────
+    isLocked: false,          // Whether bracket submissions are locked
+    championChart: null,      // Chart.js instance (unused, legacy)
+    currentGender: 'men',     // Active gender: 'men' | 'women'
+    viewingOtherBracket: false, // True when viewing someone else's bracket
+    _viewingBracketName: '',  // Display name of the bracket being viewed
+    _pickHistory: [],         // Undo stack for bracket picks
+
+    // ── Game flow state ─────────────────────────────────────────
+    // gameState controls what's shown within the bracket view:
+    //   'picking'            — Card-by-card matchup selection
+    //   'round-summary'      — Winners list after completing a round
+    //   'post-finals-login'  — Sign-in prompt after finishing all picks
+    //   'post-finals-submit' — Name/country/ippon form
+    //   'post-finals-thanks' — Confirmation screen
+    //   'bracket-summary'    — Full bracket tree overview
+    gameState: 'picking',
+    // currentView controls which page is shown:
+    //   'bracket' | 'leaderboard' | 'stats' | 'allBrackets' |
+    //   'liveBracket' | 'faq' | 'donate' | 'legal'
+    currentView: 'bracket',
+    gameRound: 0,             // Current round index (0-5) during picking
+    gameMatch: 0,             // Current match index within the round
+    _advanceTimeout: null,    // setTimeout ID for auto-advance after pick
+    _navGen: 0,               // Navigation generation counter — see file header
 
     // ── Initialisation ──────────────────────────────────────────
 
     // Tournament date — change this to the actual date
     tournamentDate: new Date('2026-11-03T09:00:00+09:00'),
 
+    /** Bootstrap the app: build player lists, start countdown, check for share links */
     async init() {
         this.buildPlayerLists();
         this.players = this.menPlayers;
@@ -177,6 +276,7 @@ const app = {
         this._initKeyboardNav();
     },
 
+    /** Close mobile nav when clicking outside it (both landing and app navs) */
     _initClickOutsideNav() {
         document.addEventListener('click', (e) => {
             // Landing nav
@@ -195,6 +295,7 @@ const app = {
         });
     },
 
+    /** Show/hide offline banner based on navigator.onLine */
     _initOfflineDetector() {
         const banner = document.getElementById('offlineBanner');
         if (!banner) return;
@@ -208,6 +309,7 @@ const app = {
         if (!navigator.onLine) show();
     },
 
+    /** Keyboard shortcuts: arrows/1/2 to pick, Ctrl+Z to undo, Enter to advance */
     _initKeyboardNav() {
         document.addEventListener('keydown', (e) => {
             // Only during picking state in bracket view
@@ -256,6 +358,7 @@ const app = {
 
     // ── Landing page ────────────────────────────────────────────
 
+    /** Update the countdown timer on the landing page every second */
     startCountdown() {
         const update = () => {
             const now = new Date();
@@ -278,6 +381,7 @@ const app = {
         setInterval(update, 1000);
     },
 
+    /** Fetch total bracket count from Firestore and display on landing page */
     async loadLandingStats() {
         try {
             const [menSnap, womenSnap] = await Promise.all([
@@ -296,6 +400,7 @@ const app = {
         } catch (e) { console.error('Landing stats error:', e); }
     },
 
+    /** Transition from landing page to main app and start the bracket for given gender */
     async enterBracket(gender) {
         // Hide landing, show app
         document.getElementById('landingPage').style.display = 'none';
@@ -303,17 +408,20 @@ const app = {
         const gameArea = document.getElementById('gameArea');
         if (gameArea) gameArea.innerHTML = '';
         document.getElementById('mainApp').style.display = 'block';
+        this._navGen++;
         this.currentView = 'bracket';
         this.gameState = 'picking';
 
         await this.switchGender(gender);
     },
 
+    /** Return to the landing page from the main app (with unsaved-picks warning) */
     goHome() {
         if (!this.viewingOtherBracket && this.hasAnyPicks() && !this.userBracketData) {
             if (!confirm('You have unsaved picks. Leave anyway?')) return;
         }
         this._closeNav();
+        this._navGen++;
         document.querySelector('.landing-nav-links')?.classList.remove('landing-nav-open');
         this.currentView = 'bracket';
         this.gameState = 'picking';
@@ -325,6 +433,7 @@ const app = {
         this.loadLandingStats();
     },
 
+    /** Convert raw player data arrays into player objects with sequential IDs */
     buildPlayerLists() {
         this.menPlayers = menPlayersData.map((p, i) => ({ id: i + 1, ...p }));
         this.womenPlayers = womenPlayersData.map((p, i) => ({ id: i + 1, ...p }));
@@ -332,6 +441,7 @@ const app = {
 
     // ── Authentication ──────────────────────────────────────────
 
+    /** Ensure user has at least anonymous auth (required for Firestore reads) */
     async ensureAnonymousAuth() {
         if (!auth.currentUser) {
             try { await auth.signInAnonymously(); }
@@ -339,6 +449,7 @@ const app = {
         }
     },
 
+    /** Sign in with Google. Links to anonymous account if one exists. Returns false on failure */
     async signInWithGoogle() {
         const provider = new firebase.auth.GoogleAuthProvider();
         try {
@@ -362,6 +473,7 @@ const app = {
         return true;
     },
 
+    /** Firebase auth state change handler. Checks admin status and loads user bracket */
     async onAuth(user) {
         this.currentUser = user;
         if (user && !user.isAnonymous && user.email) {
@@ -382,6 +494,7 @@ const app = {
 
     // ── Account / Sign-in ───────────────────────────────────────
 
+    /** Update sign-in button text and MY BRACKET link visibility across both navs */
     _updateAccountBtn() {
         const btn = document.getElementById('accountBtn');
         const landingBtn = document.getElementById('landingSignIn');
@@ -401,16 +514,19 @@ const app = {
         }
     },
 
+    /** Highlight the active nav tab by ID, removing active from all others */
     _setActiveNav(id) {
         document.querySelectorAll('.app-nav .nav-link').forEach(btn => btn.classList.remove('active'));
         const el = document.getElementById(id);
         if (el) el.classList.add('active');
     },
 
+    /** Close the mobile hamburger menu */
     _closeNav() {
         document.querySelector('.app-nav')?.classList.remove('nav-open');
     },
 
+    /** Show the sign-in/account modal (different content if already signed in) */
     showSignInModal() {
         this._closeNav();
         const user = this.currentUser;
@@ -452,6 +568,7 @@ const app = {
         unlockBodyScroll();
     },
 
+    /** Upgrade anonymous account to Google. Migrates brackets if UID changes */
     async upgradeWithGoogle() {
         const oldUid = this.currentUser?.uid;
         const oldBracket = { ...this.bracket };
@@ -474,6 +591,7 @@ const app = {
         }
     },
 
+    /** Copy bracket data from old anonymous UID to new authenticated UID. Verifies write before deleting old */
     async _migrateBracket(oldUid, newUid) {
         try {
             for (const gender of ['men', 'women']) {
@@ -484,8 +602,11 @@ const app = {
                     if (!newDoc.exists) {
                         await db.collection('brackets-' + gender).doc(newUid).set(oldDoc.data());
                     }
-                    // Clean up old anonymous bracket
-                    await db.collection('brackets-' + gender).doc(oldUid).delete();
+                    // Verify write succeeded before deleting old bracket
+                    const verifyDoc = await db.collection('brackets-' + gender).doc(newUid).get();
+                    if (verifyDoc.exists) {
+                        await db.collection('brackets-' + gender).doc(oldUid).delete();
+                    }
                 }
             }
             // Reload bracket for current gender
@@ -495,6 +616,7 @@ const app = {
         }
     },
 
+    /** Send a passwordless sign-in link to the user's email */
     async sendEmailLink() {
         const email = document.getElementById('emailSignInInput')?.value?.trim();
         if (!email) { showToast('Please enter your email.', 'error'); return; }
@@ -513,6 +635,7 @@ const app = {
         }
     },
 
+    /** Complete email link sign-in if the current URL contains a sign-in link */
     async completeEmailSignIn() {
         if (!auth.isSignInWithEmailLink(window.location.href)) return;
         let email = localStorage.getItem('emailForSignIn');
@@ -548,6 +671,7 @@ const app = {
         }
     },
 
+    /** Sign out and re-authenticate anonymously */
     async signOut() {
         try {
             await auth.signOut();
@@ -558,6 +682,7 @@ const app = {
         }
     },
 
+    /** Capture bracket as PNG using html2canvas and trigger download */
     async shareBracket() {
         let displayName;
         if (this.viewingOtherBracket) {
@@ -668,6 +793,7 @@ const app = {
         }
     },
 
+    /** Copy or share a direct link to the user's bracket (uses Web Share API if available) */
     async shareLink() {
         const uid = this.currentUser?.uid;
         if (!uid) {
@@ -693,6 +819,7 @@ const app = {
         }
     },
 
+    /** Check URL hash for #bracket/{gender}/{uid} share links and load that bracket */
     _checkShareLink() {
         const hash = window.location.hash;
         const match = hash.match(/^#bracket\/(men|women)\/(.+)$/);
@@ -715,6 +842,7 @@ const app = {
         }
     },
 
+    /** After saving a bracket, prompt anonymous users to upgrade their account */
     async promptAccountUpgrade() {
         if (!this.currentUser || !this.currentUser.isAnonymous) return;
         const content = document.getElementById('signInContent');
@@ -746,6 +874,7 @@ const app = {
 
     // ── Gender switching ────────────────────────────────────────
 
+    /** Switch between men's and women's brackets. Resets picks, reloads user bracket, updates colors */
     async switchGender(gender) {
         this.currentGender = gender;
         this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
@@ -767,6 +896,10 @@ const app = {
         document.getElementById('menBtn')?.classList.toggle('active', gender === 'men');
         document.getElementById('womenBtn')?.classList.toggle('active', gender === 'women');
 
+        // Clear stale content immediately so old bracket doesn't flash in new colors
+        const gc = document.getElementById('gameContainer');
+        if (gc) gc.innerHTML = '';
+
         await this.checkLockStatus();
         await this.loadActualResults();
 
@@ -786,6 +919,7 @@ const app = {
 
     // ── Lock status ─────────────────────────────────────────────
 
+    /** Check Firestore + tournament date to determine if submissions are locked */
     async checkLockStatus() {
         try {
             const doc = await db.collection('settings').doc('tournament').get();
@@ -796,6 +930,7 @@ const app = {
         } catch (e) { console.error('Error checking lock status:', e); }
     },
 
+    /** Admin: toggle submission lock on/off for both brackets */
     async toggleLock() {
         try {
             this.isLocked = !this.isLocked;
@@ -815,8 +950,14 @@ const app = {
 
     // ── Bracket persistence ─────────────────────────────────────
 
+    /**
+     * Load the current user's saved bracket from Firestore.
+     * Restores picks, sets gameState, and renders.
+     * Uses _navGen guard to prevent stale renders.
+     */
     async loadUserBracket() {
         if (!this.currentUser) return;
+        const navGen = this._navGen;
         try {
             const doc = await db.collection('brackets-' + this.currentGender)
                 .doc(this.currentUser.uid).get();
@@ -862,13 +1003,14 @@ const app = {
             }
             this.viewingOtherBracket = false;
             UI.showBackToMine(false);
-            // Only render if the main app is visible (not on landing page)
-            if (document.getElementById('mainApp').style.display !== 'none') {
+            // Only render if the main app is visible and user hasn't navigated away
+            if (navGen === this._navGen && document.getElementById('mainApp').style.display !== 'none') {
                 this.render();
             }
         } catch (e) { console.error('Error loading user bracket:', e); }
     },
 
+    /** Check if the user has made any picks in any round */
     hasAnyPicks() {
         for (let r = 0; r < 6; r++) {
             if (this.bracket[r] && Object.keys(this.bracket[r]).length > 0) return true;
@@ -876,6 +1018,7 @@ const app = {
         return false;
     },
 
+    /** Save the current bracket to Firestore with user's name, location, and ippon prediction */
     saveBracket() {
         if (!this.currentUser) {
             showToast('Something went wrong — please refresh.', 'error');
@@ -920,6 +1063,7 @@ const app = {
 
     // ── Admin mode ──────────────────────────────────────────────
 
+    /** Toggle admin mode on/off. Requires Google sign-in and admin whitelist check */
     async toggleAdminMode() {
         if (!this.adminMode) {
             if (!this.currentUser || this.currentUser.isAnonymous || !this.isAdmin) {
@@ -991,6 +1135,7 @@ const app = {
         this.render();
     },
 
+    /** Admin: delete all actual results for the current gender (requires typing DELETE) */
     async clearActualResults() {
         const gender = this.currentGender;
         const label = gender === 'men' ? "mens" : "womens";
@@ -1008,6 +1153,7 @@ const app = {
         } catch (e) { showToast('Error: ' + e.message, 'error'); }
     },
 
+    /** Admin: switch gender while in admin mode and reload results */
     async switchAdminGender(gender) {
         this.currentGender = gender;
         this.players = gender === 'men' ? this.menPlayers : this.womenPlayers;
@@ -1020,6 +1166,7 @@ const app = {
         this.render();
     },
 
+    /** Admin: delete all user bracket submissions for current gender (requires typing DELETE) */
     async clearUserData() {
         const gender = this.currentGender;
         const label = gender === 'men' ? "mens" : "womens";
@@ -1040,6 +1187,7 @@ const app = {
         } catch (e) { showToast('Error: ' + e.message, 'error'); }
     },
 
+    /** Admin: delete everything (brackets + results) for current gender */
     async clearAll() {
         const input = prompt('This will delete ALL data for this bracket (users + results).\n\nType DELETE to confirm:');
         if (input !== 'DELETE') {
@@ -1070,6 +1218,7 @@ const app = {
 
     // ── Game flow helpers ───────────────────────────────────────
 
+    /** Check if all matches in a round have been picked */
     isRoundComplete(round) {
         const count = 32 / Math.pow(2, round);
         for (let m = 0; m < count; m++) {
@@ -1078,6 +1227,7 @@ const app = {
         return true;
     },
 
+    /** Check if all 63 matches across all 6 rounds have been picked */
     isBracketComplete() {
         for (let r = 0; r < 6; r++) {
             if (!this.isRoundComplete(r)) return false;
@@ -1085,6 +1235,7 @@ const app = {
         return true;
     },
 
+    /** Find the first unpicked match and set gameRound/gameMatch to it */
     findFirstIncompleteMatch() {
         for (let r = 0; r < 6; r++) {
             if (!this.isRoundComplete(r)) {
@@ -1101,6 +1252,7 @@ const app = {
         this.gameState = 'bracket-summary';
     },
 
+    /** When a pick changes, recursively clear all downstream picks that depended on the old winner */
     invalidateDownstream(round, matchIndex) {
         const nextRound = round + 1;
         if (nextRound > 5) return;
@@ -1113,6 +1265,7 @@ const app = {
 
     // ── Card flow interaction ───────────────────────────────────
 
+    /** Handle a player pick: record to undo stack, update bracket, invalidate downstream, auto-advance */
     pickWinner(round, matchIndex, playerId) {
         clearTimeout(this._advanceTimeout);
         const oldPick = this.bracket[round]?.[matchIndex];
@@ -1154,11 +1307,12 @@ const app = {
         this._advanceTimeout = setTimeout(() => this.nextMatch(), 400);
     },
 
+    /** Spawn confetti particles when the user picks their champion */
     fireConfetti() {
         const container = document.getElementById('gameContainer');
         const confettiEl = document.createElement('div');
         confettiEl.className = 'confetti-container';
-        const colors = ['#f1c40f', '#e74c3c', '#667eea', '#48bb78', '#ec4899', '#fff'];
+        const colors = ['#f1c40f', '#e74c3c', '#d4a843', '#48bb78', '#cc3333', '#fff'];
         for (let i = 0; i < 60; i++) {
             const piece = document.createElement('div');
             piece.className = 'confetti-piece';
@@ -1172,6 +1326,7 @@ const app = {
         setTimeout(() => confettiEl.remove(), 3500);
     },
 
+    /** Advance to the next match, or transition to round-summary/post-finals if round is complete */
     nextMatch() {
         clearTimeout(this._advanceTimeout);
         const matchCount = 32 / Math.pow(2, this.gameRound);
@@ -1201,6 +1356,7 @@ const app = {
         this.render();
     },
 
+    /** Go back to the previous match (or previous round's last match) */
     prevMatch() {
         clearTimeout(this._advanceTimeout);
 
@@ -1220,6 +1376,7 @@ const app = {
         this.render();
     },
 
+    /** Pop the last pick from history, restore old state, and re-render */
     undoLastPick() {
         if (!this._pickHistory.length) return;
         clearTimeout(this._advanceTimeout);
@@ -1240,6 +1397,7 @@ const app = {
         this.render();
     },
 
+    /** Show round splash screen then advance to next round's first match */
     advanceToNextRound() {
         const nextRound = this.gameRound + 1;
         // Show dramatic splash before entering next round
@@ -1251,6 +1409,7 @@ const app = {
         });
     },
 
+    /** Display a dramatic full-screen splash with round name (Japanese + English) */
     showRoundSplash(roundIndex, callback) {
         const container = document.getElementById('gameContainer');
         const name = ROUND_NAMES[roundIndex];
@@ -1269,6 +1428,7 @@ const app = {
 
     // ── Post-finals transition screens ───────────────────────────
 
+    /** Post-finals: show Google sign-in screen for anonymous users */
     renderPostFinalsLogin() {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
@@ -1299,6 +1459,7 @@ const app = {
         this.render();
     },
 
+    /** Post-finals: show name/country/ippon submission form */
     renderPostFinalsSubmit() {
         const container = document.getElementById('gameContainer');
         const savedName = this.currentUser?.displayName || document.getElementById('userName')?.value || '';
@@ -1357,6 +1518,7 @@ const app = {
         });
     },
 
+    /** Post-finals: validate form inputs and save bracket to Firestore */
     _postFinalsSubmit() {
         if (!this.currentUser) {
             showToast('Something went wrong — please refresh.', 'error');
@@ -1398,6 +1560,7 @@ const app = {
         }).catch(e => showToast('Error saving bracket: ' + e.message, 'error'));
     },
 
+    /** Post-finals: show thank-you screen with champion pick */
     renderPostFinalsThanks() {
         const container = document.getElementById('gameContainer');
         const champion = this._getChampionName();
@@ -1414,6 +1577,7 @@ const app = {
             </div>`;
     },
 
+    /** Get the name of the user's predicted champion (round 5, match 0 winner) */
     _getChampionName() {
         const winnerId = this.bracket[5]?.[0];
         if (!winnerId) return null;
@@ -1452,12 +1616,14 @@ const app = {
 
     // ── Admin bracket interaction ───────────────────────────────
 
+    /** Admin: record a match winner in the actual results bracket */
     selectWinner(round, matchup, playerId) {
         if (!this.bracket[round]) this.bracket[round] = {};
         this.bracket[round][matchup] = playerId;
         this.renderAdminBracket();
     },
 
+    /** Admin: save current bracket state as official tournament results */
     async saveAdminResults() {
         try {
             await db.collection('actualResults-' + this.currentGender).doc('current').set({
@@ -1472,6 +1638,7 @@ const app = {
         }
     },
 
+    /** Admin: save the winning ippon technique for the finals */
     async saveActualTechnique() {
         const technique = document.getElementById('adminTechnique')?.value || '';
         const score = document.getElementById('adminFinalScore')?.value || '';
@@ -1489,6 +1656,11 @@ const app = {
 
     // ── Rendering dispatch ──────────────────────────────────────
 
+    /**
+     * Get the two players for each match in a given round.
+     * Round 0: pairs from the seeded player list.
+     * Rounds 1-5: winners from the previous round's picks.
+     */
     getRoundMatches(round) {
         const matchCount = 32 / Math.pow(2, round);
         const matches = [];
@@ -1510,6 +1682,10 @@ const app = {
         return matches;
     },
 
+    /**
+     * Main render dispatcher. Routes to the correct page/view based on
+     * currentView and gameState. Called after every state change.
+     */
     render() {
         const gameContainer = document.getElementById('gameContainer');
         const bracketContainer = document.getElementById('bracketContainer');
@@ -1550,6 +1726,7 @@ const app = {
         }
     },
 
+    /** Render the card-based matchup picking view for the current round/match */
     renderCardView() {
         const matches = this.getRoundMatches(this.gameRound);
         const match = matches[this.gameMatch];
@@ -1589,6 +1766,7 @@ const app = {
         });
     },
 
+    /** Render the round completion screen showing all winners advancing */
     renderRoundSummaryView() {
         const matches = this.getRoundMatches(this.gameRound);
         const picks = [];
@@ -1611,6 +1789,7 @@ const app = {
         });
     },
 
+    /** Render the full bracket summary page with stats bar, bracket tree, and action buttons */
     renderBracketSummaryView() {
         const rounds = [];
         for (let r = 0; r < 6; r++) {
@@ -1694,11 +1873,18 @@ const app = {
         });
     },
 
+    /** Render the admin bracket tree with clickable player slots */
     renderAdminBracket() {
         document.getElementById('bracket').innerHTML = this.buildBracketHTML(true);
         this.scheduleBracketRedraw('bracket');
     },
 
+    /**
+     * Build the NCAA-style bracket HTML tree.
+     * Creates left half (matches 0-15), finals, right half (matches 16-31).
+     * Each player slot gets correct/incorrect/selected CSS classes.
+     * @param {boolean} isAdmin - If true, slots are clickable for admin editing
+     */
     buildBracketHTML(isAdmin) {
         const renderPlayer = (round, mi, player, clickable) => {
             if (!player) return `<div class="bp bp-tbd"><span class="bp-name">TBD</span></div>`;
@@ -1768,6 +1954,11 @@ const app = {
 
     // ── SVG bracket connector lines ──────────────────────────────
 
+    /**
+     * Schedule a bracket SVG redraw after layout settles.
+     * Uses double-rAF to ensure DOM measurements are accurate.
+     * Also re-initializes pinch-to-zoom and player tooltips.
+     */
     scheduleBracketRedraw(containerId) {
         // Double rAF to ensure layout is fully computed (fixes small bracket on gender switch)
         requestAnimationFrame(() => {
@@ -1789,6 +1980,7 @@ const app = {
         this._initPlayerTooltip();
     },
 
+    /** Remove any transform/scale from the bracket (prep for redraw or screenshot) */
     _resetBracketScale() {
         const bracket = document.querySelector('.ncaa-bracket');
         const wrapper = document.querySelector('.bracket-tree-wrapper');
@@ -1799,6 +1991,7 @@ const app = {
         if (wrapper) wrapper.style.height = '';
     },
 
+    /** Scale the bracket down to fit within its wrapper width */
     _scaleBracketToFit() {
         const bracket = document.querySelector('.ncaa-bracket');
         const wrapper = document.querySelector('.bracket-tree-wrapper');
@@ -1816,6 +2009,7 @@ const app = {
 
     _bracketResizeCleanup: null,
 
+    /** Watch for wrapper resize events and redraw bracket (skip if user is manually zoomed) */
     _attachBracketResizeWatcher(containerId) {
         // Clean up previous watchers
         if (this._bracketResizeCleanup) {
@@ -1857,6 +2051,11 @@ const app = {
 
     // ── Player hover tooltip ─────────────────────────────────────
 
+    /**
+     * Initialize hover tooltips for bracket player slots.
+     * Shows player name, Japanese name, prefecture, rank, and photo.
+     * Uses event delegation — only initialized once (_tooltipInited flag).
+     */
     _initPlayerTooltip() {
         if (this._tooltipInited) return;
         this._tooltipInited = true;
@@ -1874,7 +2073,8 @@ const app = {
             if (!bp) return;
             clearTimeout(hideTimer);
             const pid = parseInt(bp.dataset.pid);
-            const players = this.currentGender === 'men' ? this.menPlayers : this.womenPlayers;
+            const tooltipGender = this.currentView === 'liveBracket' ? this._liveBracketGender : this.currentGender;
+            const players = tooltipGender === 'men' ? this.menPlayers : this.womenPlayers;
             const player = players.find(p => p.id === pid);
             if (!player) return;
 
@@ -1918,6 +2118,11 @@ const app = {
         });
     },
 
+    /**
+     * Draw SVG connector lines between bracket matchups.
+     * Calculates positions from DOM bounding rects and draws
+     * horizontal + vertical lines connecting each pair to its next-round match.
+     */
     drawBracketSVG(containerId) {
         const container = containerId
             ? document.getElementById(containerId)
@@ -1992,6 +2197,7 @@ const app = {
         }
     },
 
+    /** Return CSS classes for a bracket player slot: 'selected', 'correct', 'incorrect' */
     getPlayerClasses(round, matchIndex, playerId, isSelected) {
         let classes = '';
         if (isSelected) classes += 'selected ';
@@ -2007,6 +2213,7 @@ const app = {
 
     // ── Actual results ──────────────────────────────────────────
 
+    /** Load official tournament results and final ippon technique from Firestore */
     async loadActualResults() {
         try {
             const doc = await db.collection('actualResults-' + this.currentGender).doc('current').get();
@@ -2026,24 +2233,44 @@ const app = {
     _lbPageSize: 10,
     _lbScores: [],
 
+    /**
+     * Fetch all brackets, score them against actual results, sort by points, and render.
+     * If no results exist yet, shows brackets sorted by submission time with '-' rankings.
+     */
     async updateLeaderboard(gender) {
         const g = gender || this._lbGender || this.currentGender;
         this._lbGender = g;
+        // Skip if leaderboard is not currently rendered
+        if (!document.getElementById('leaderboardContent')) return;
         try {
             const resultsDoc = await db.collection('actualResults-' + g).doc('current').get();
-            if (!resultsDoc.exists) {
-                document.getElementById('leaderboardContent').innerHTML =
-                    '<p style="text-align:center;color:#666;padding:40px;">No results entered yet.</p>';
-                return;
-            }
-            const actualResults = resultsDoc.data().predictions || {};
-            if (g === this.currentGender) this.actualResults = actualResults;
+            const hasResults = resultsDoc.exists && Object.keys(resultsDoc.data().predictions || {}).length > 0;
             const snap = await db.collection('brackets-' + g).get();
             if (snap.empty) {
                 document.getElementById('leaderboardContent').innerHTML =
                     '<p style="text-align:center;color:#666;padding:40px;">No brackets submitted yet.</p>';
                 return;
             }
+            if (!hasResults) {
+                // No results yet — show all brackets sorted by submission time
+                const entries = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.predictions) return;
+                    entries.push({ uid: doc.id, name: data.displayName || doc.id, score: '-', correct: 0, total: 0, location: data.location || '', techniqueBonus: 0, timestamp: data.timestamp, rank: '-' });
+                });
+                entries.sort((a, b) => {
+                    const aTime = a.timestamp?.toMillis?.() || a.timestamp?.seconds * 1000 || Infinity;
+                    const bTime = b.timestamp?.toMillis?.() || b.timestamp?.seconds * 1000 || Infinity;
+                    return aTime - bTime;
+                });
+                this._lbScores = entries;
+                this._lbPage = 0;
+                this._renderLeaderboard();
+                return;
+            }
+            const actualResults = resultsDoc.data().predictions || {};
+            if (g === this.currentGender) this.actualResults = actualResults;
             const roundPoints = [1, 2, 4, 8, 16, 32];
             const scores = [];
             const totalActual = Object.values(actualResults).reduce((s, r) => s + Object.keys(r).length, 0);
@@ -2093,6 +2320,7 @@ const app = {
         }
     },
 
+    /** Render the leaderboard page shell with skeleton loading state */
     renderLeaderboardPage() {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
@@ -2128,6 +2356,7 @@ const app = {
         this._initPullToRefresh('leaderboardContent', () => this.updateLeaderboard());
     },
 
+    /** Add pull-to-refresh touch gesture to a scrollable container */
     _initPullToRefresh(containerId, refreshFn) {
         const container = document.getElementById(containerId);
         if (!container || container._ptrInited) return;
@@ -2175,11 +2404,14 @@ const app = {
         }, { passive: true });
     },
 
+    /** Render leaderboard content: podium (top 3) + paginated table + pinned "You" row */
     _renderLeaderboard() {
         const scores = this._lbScores;
         const uid = this.currentUser?.uid;
         const container = document.getElementById('leaderboardContent');
         if (!scores.length) { container.innerHTML = '<p style="text-align:center;color:#666;padding:40px;">No data</p>'; return; }
+        const noResults = scores[0]?.rank === '-';
+        const _fmtRank = (r) => r === '-' ? '-' : String(r).padStart(2, '0');
         const top3 = scores.slice(0, 3);
         const podiumOrder = [top3[1], top3[0], top3[2]];
         const podiumHtml = podiumOrder.map((entry, i) => {
@@ -2187,11 +2419,11 @@ const app = {
             const pos = i === 1 ? 1 : i === 0 ? 2 : 3;
             const isCenter = pos === 1;
             return `<div class="lb-podium-item lb-podium-${pos}${isCenter ? ' lb-podium-center' : ''}" onclick="app.viewBracketFromLeaderboard('${UI.escapeHtml(entry.uid)}')" style="cursor:pointer;">
-                <div class="lb-podium-rank">${String(pos).padStart(2, '0')}</div>
-                ${isCenter ? '<div class="lb-podium-trophy">\ud83c\udfc6</div>' : ''}
+                <div class="lb-podium-rank">${noResults ? '-' : String(pos).padStart(2, '0')}</div>
+                ${isCenter && !noResults ? '<div class="lb-podium-trophy">\ud83c\udfc6</div>' : ''}
                 <div class="lb-podium-name">${UI.escapeHtml(entry.name)}</div>
                 <div class="lb-podium-loc">${UI.escapeHtml(entry.location || '')}</div>
-                <div class="lb-podium-pts"><strong>${entry.score}</strong> <small>PTS</small></div>
+                <div class="lb-podium-pts"><strong>${entry.score}</strong> <small>${noResults ? '' : 'PTS'}</small></div>
                 <div class="lb-podium-view">VIEW BRACKET</div>
             </div>`;
         }).join('');
@@ -2206,9 +2438,9 @@ const app = {
         const rowsHtml = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
             return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
-                <span class="lb-row-rank">${String(entry.rank).padStart(2, '0')}</span>
+                <span class="lb-row-rank">${_fmtRank(entry.rank)}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
-                <span class="lb-row-correct">${entry.correct} / ${entry.total}</span>
+                <span class="lb-row-correct">${noResults ? '-' : entry.correct + ' / ' + entry.total}</span>
                 <span class="lb-row-date">${_fmtDate(entry.timestamp)}</span>
                 <span class="lb-row-pts">${entry.score}</span>
             </div>`;
@@ -2216,9 +2448,9 @@ const app = {
         // Pinned "You" row
         const youEntry = uid ? scores.find(e => e.uid === uid) : null;
         const youRowHtml = youEntry ? `<div class="lb-row lb-row-you">
-                <span class="lb-row-rank">#${youEntry.rank}</span>
+                <span class="lb-row-rank">${youEntry.rank === '-' ? '-' : '#' + youEntry.rank}</span>
                 <span class="lb-row-name">You (${UI.escapeHtml(youEntry.name)})${youEntry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(youEntry.location) + '</span>' : ''}</span>
-                <span class="lb-row-correct">${youEntry.correct} / ${youEntry.total}</span>
+                <span class="lb-row-correct">${noResults ? '-' : youEntry.correct + ' / ' + youEntry.total}</span>
                 <span class="lb-row-date">${_fmtDate(youEntry.timestamp)}</span>
                 <span class="lb-row-pts">${youEntry.score}</span>
             </div>` : '';
@@ -2227,7 +2459,7 @@ const app = {
             : '';
         container.innerHTML = `
             <div class="ad-slot" id="adLeaderboardTop" style="display:none"></div>
-            <div class="lb-podium">${podiumHtml}</div>
+            ${noResults ? '' : '<div class="lb-podium">' + podiumHtml + '</div>'}
             ${youRowHtml}
             <div class="lb-table">
                 <div class="lb-table-header"><span>RANK</span><span>NAME</span><span class="lb-row-correct">PICKS</span><span class="lb-row-date">SUBMITTED</span><span>PTS</span></div>
@@ -2236,19 +2468,21 @@ const app = {
             ${loadMoreHtml}`;
     },
 
+    /** Append next page of leaderboard rows and update load-more button */
     _lbLoadMore() {
         this._lbPage++;
         const start = this._lbPage * this._lbPageSize;
         const pageEntries = this._lbScores.slice(start, start + this._lbPageSize);
         const uid = this.currentUser?.uid;
         const hasMore = start + this._lbPageSize < this._lbScores.length;
+        const noResults = this._lbScores[0]?.rank === '-';
         const newRows = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
             const _fmtD = (ts) => { if (!ts) return '\u2014'; const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
             return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
-                <span class="lb-row-rank">${String(entry.rank).padStart(2, '0')}</span>
+                <span class="lb-row-rank">${entry.rank === '-' ? '-' : String(entry.rank).padStart(2, '0')}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
-                <span class="lb-row-correct">${entry.correct} / ${entry.total}</span>
+                <span class="lb-row-correct">${noResults ? '-' : entry.correct + ' / ' + entry.total}</span>
                 <span class="lb-row-date">${_fmtD(entry.timestamp)}</span>
                 <span class="lb-row-pts">${entry.score}</span>
             </div>`;
@@ -2278,6 +2512,7 @@ const app = {
     showLeaderboard() {
         if (this._warnIfPicking()) return;
         this._closeNav();
+        this._navGen++;
         this._lbGender = this.currentGender;
         this.currentView = 'leaderboard';
         this._setActiveNav('navLeaderboard');
@@ -2286,6 +2521,7 @@ const app = {
     },
 
     closeLeaderboard() {
+        this._navGen++;
         this.currentView = 'bracket';
         this._setActiveNav('navMyBracket');
         this.render();
@@ -2293,11 +2529,12 @@ const app = {
 
     _lbUnsubscribe: null,
 
+    /** Start a Firestore real-time listener that refreshes leaderboard on new submissions */
     _startLeaderboardListener() {
         this._stopLeaderboardListener();
         const g = this._lbGender || this.currentGender;
         this._lbUnsubscribe = db.collection('brackets-' + g).onSnapshot(() => {
-            if (document.getElementById('leaderboardModal')?.style.display === 'block') {
+            if (this.currentView === 'leaderboard') {
                 this.updateLeaderboard(g);
             }
         }, () => {});
@@ -2310,6 +2547,7 @@ const app = {
         }
     },
 
+    /** Navigate to a specific user's bracket from the leaderboard */
     viewBracketFromLeaderboard(uid) {
         const lbGender = this._lbGender || this.currentGender;
         // Switch view without rendering — loadSpecificBracket will render
@@ -2330,27 +2568,30 @@ const app = {
     async viewAllBrackets() {
         if (this._warnIfPicking()) return;
         this._closeNav();
+        this._navGen++;
         this.currentView = 'allBrackets';
         this._setActiveNav('navAllBrackets');
         delete document.body.dataset.intensity;
         this.render();
     },
 
+    /** Render the "All Brackets" page with search input and paginated list */
     renderAllBracketsPage() {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
             <div class="page-view">
                 <h1 class="page-title">ALL BRACKETS</h1>
-                <div style="max-width:1000px;margin:0 auto 16px;position:relative;">
+                <div class="ab-container">
                     <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.3);font-size:0.9em;pointer-events:none;">&#128269;</span>
-                    <input type="text" id="bracketSearch" class="submit-name-input" style="width:100%;padding-left:34px;" placeholder="Find bracket by name..." oninput="app.filterBrackets(this.value)" />
+                    <input type="text" id="bracketSearch" class="submit-name-input" style="width:100%;padding-left:34px;" placeholder="Find bracket by name or country..." oninput="app.filterBrackets(this.value)" />
                 </div>
-                <div id="bracketsList" class="bracket-list" style="max-width:1000px;margin:0 auto;"></div>
+                <div id="bracketsList" class="bracket-list ab-container"></div>
                 <div class="ad-slot" id="adAllBrackets" style="display:none"></div>
             </div>`;
         this._loadAllBrackets();
     },
 
+    /** Fetch all men's + women's brackets from Firestore and sort by date */
     async _loadAllBrackets() {
         const bracketsList = document.getElementById('bracketsList');
         try {
@@ -2416,11 +2657,11 @@ const app = {
             <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''} ab-row-${item.gender}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}', '${item.gender}')">
                 <div class="ab-info">
                     <div class="ab-name-wrap">
-                        ${genderBadge}
                         ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
                         <span class="ab-name">${UI.escapeHtml(item.name)}</span>
+                        ${genderBadge}
+                        ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
                     </div>
-                    ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
                 </div>
                 <div class="ab-meta">
                     <div class="ab-date-wrap">
@@ -2454,11 +2695,11 @@ const app = {
             <div class="ab-row${isMe(item.uid) ? ' ab-row-you' : ''} ab-row-${item.gender}" onclick="app.loadSpecificBracket('${UI.escapeHtml(item.uid)}', '${item.gender}')">
                 <div class="ab-info">
                     <div class="ab-name-wrap">
-                        ${genderBadge}
                         ${isMe(item.uid) ? '<span class="ab-you-label">YOUR BRACKET</span>' : ''}
                         <span class="ab-name">${UI.escapeHtml(item.name)}</span>
+                        ${genderBadge}
+                        ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
                     </div>
-                    ${item.location ? '<span class="ab-loc">' + UI.escapeHtml(item.location) + '</span>' : ''}
                 </div>
                 <div class="ab-meta">
                     <div class="ab-date-wrap">
@@ -2480,6 +2721,7 @@ const app = {
         }
     },
 
+    /** Filter the bracket list by search query (name or country) */
     filterBrackets(query) {
         if (!this._allBracketItems) return;
         const q = query.toLowerCase().trim();
@@ -2489,7 +2731,12 @@ const app = {
         this._renderBracketList(filtered);
     },
 
+    /**
+     * Load a specific user's bracket by UID. Switches gender if needed.
+     * Uses _navGen guard to prevent rendering if user navigated away.
+     */
     async loadSpecificBracket(uid, gender) {
+        const navGen = ++this._navGen;
         try {
             const g = gender || this.currentGender;
             if (g !== this.currentGender) {
@@ -2500,6 +2747,7 @@ const app = {
                 document.body.className = g === 'women' ? 'women' : '';
             }
             const doc = await db.collection('brackets-' + g).doc(uid).get();
+            if (navGen !== this._navGen) return; // User navigated away
             if (doc.exists) {
                 const data = doc.data();
                 this.bracket = data.predictions || {};
@@ -2509,6 +2757,7 @@ const app = {
                 this.gameState = 'bracket-summary';
                 UI.showBackToMine(this.viewingOtherBracket);
                 await this.loadActualResults();
+                if (navGen !== this._navGen) return; // User navigated away
                 this.render();
             } else {
                 showToast('Bracket not found.', 'error');
@@ -2519,8 +2768,10 @@ const app = {
         }
     },
 
+    /** Return to the user's own bracket (from viewing someone else's) */
     viewMyBracket() {
         this._closeNav();
+        this._navGen++;
         this.currentView = 'bracket';
         this.viewingOtherBracket = false;
         UI.showBackToMine(false);
@@ -2573,6 +2824,7 @@ const app = {
 
     showLegal(tab) {
         this._legalTab = tab || 'privacy';
+        this._navGen++;
         this.currentView = 'legal';
         this._setActiveNav(null);
         delete document.body.dataset.intensity;
@@ -2587,6 +2839,7 @@ const app = {
         this.renderLegalPage();
     },
 
+    /** Render legal page (Privacy Policy / Terms of Service) with tab switching */
     renderLegalPage() {
         const container = document.getElementById('gameContainer');
         const isPrivacy = this._legalTab === 'privacy';
@@ -2670,6 +2923,7 @@ const app = {
     showLiveBracket() {
         if (this._warnIfPicking()) return;
         this._closeNav();
+        this._navGen++;
         this._liveBracketGender = this.currentGender;
         this.currentView = 'liveBracket';
         this._setActiveNav('navLiveBracket');
@@ -2678,6 +2932,7 @@ const app = {
     },
 
     async showLandingLiveBracket() {
+        this._navGen++;
         this.currentView = 'liveBracket';
         this._liveBracketGender = 'men';
         this._setActiveNav('navLiveBracket');
@@ -2685,6 +2940,7 @@ const app = {
         document.getElementById('gameContainer').innerHTML = '';
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        window.scrollTo(0, 0);
         this.render();
     },
 
@@ -2698,6 +2954,7 @@ const app = {
         }
     },
 
+    /** Render live bracket: fetch official results and display as read-only bracket tree */
     async renderLiveBracketPage() {
         const container = document.getElementById('gameContainer');
         const gender = this._liveBracketGender;
@@ -2767,6 +3024,7 @@ const app = {
         }
     },
 
+    /** Switch live bracket gender and re-render */
     _switchLiveGender(gender) {
         this._liveBracketGender = gender;
         document.body.className = gender === 'women' ? 'women' : '';
@@ -2780,12 +3038,14 @@ const app = {
     async showStats() {
         if (this._warnIfPicking()) return;
         this._closeNav();
+        this._navGen++;
         this.currentView = 'stats';
         this._setActiveNav('navStats');
         delete document.body.dataset.intensity;
         this.render();
     },
 
+    /** Render stats page shell with skeleton loading state, then load data */
     renderStatsPage() {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
@@ -2808,6 +3068,11 @@ const app = {
         this._initPullToRefresh('statsContent', () => this._loadStats());
     },
 
+    /**
+     * Load and render all tournament statistics:
+     * overview cards, world map, champion picks, controversial matchups,
+     * pick popularity, and achievement badges.
+     */
     async _loadStats() {
         const content = document.getElementById('statsContent');
 
@@ -2900,6 +3165,10 @@ const app = {
         }
     },
 
+    /**
+     * Aggregate bracket data for stats: champion picks, per-round pick counts,
+     * and most controversial matchup (closest to 50/50 split).
+     */
     _aggregateStats(snap, players) {
         const champions = {};
         const pickData = {};
@@ -2976,6 +3245,11 @@ const app = {
         'Other': [0, 0]
     },
 
+    /**
+     * Build an SVG world map showing bracket submission locations.
+     * Uses equirectangular projection with approximate country coordinates.
+     * Dot size and opacity scale with submission count.
+     */
     _buildGlobalMap(locationCounts) {
         const entries = Object.entries(locationCounts).filter(([c]) => c !== 'Other' && this._countryCoords[c]);
         const otherCount = locationCounts['Other'] || 0;
@@ -3038,6 +3312,7 @@ const app = {
         </div>`;
     },
 
+    /** Build an HTML table showing champion pick distribution with percentage bars */
     _buildChampionTable(title, champions, actualChampName) {
         if (champions.length === 0 && !actualChampName) {
             return `<div class="stat-section"><h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
@@ -3075,6 +3350,7 @@ const app = {
         </div>`;
     },
 
+    /** Build the "most controversial" matchup card showing the closest to 50/50 split */
     _buildControversial(title, data, players) {
         if (!data) {
             return `<div class="stat-section"><h3 class="stat-section-title">${UI.escapeHtml(title)}</h3>
@@ -3184,6 +3460,7 @@ const app = {
         this._statsCharts.push(chart);
     },
 
+    /** Build expandable pick popularity sections showing per-match pick distributions */
     _buildPickPopularity(title, pickData, players) {
         if (!pickData || Object.keys(pickData).length === 0) return '';
 
@@ -3227,6 +3504,7 @@ const app = {
 
     // ── Bracket Similarity ──────────────────────────────────────
 
+    /** Calculate how often the user's picks match the most popular choice per matchup */
     _calcBracketSimilarity(userBracket, pickData) {
         if (!pickData || !userBracket) return null;
         let matches = 0, agrees = 0;
@@ -3323,6 +3601,7 @@ const app = {
 
     // ── Achievement Badges ──────────────────────────────────────
 
+    /** Build achievement badges: Early Bird, Contrarian, Upset Caller, Oracle */
     _buildAchievements(menSnap, womenSnap, menActualResults, womenActualResults) {
         const allDocs = [];
         menSnap.forEach(doc => allDocs.push({ ...doc.data(), uid: doc.id, gender: 'men' }));
@@ -3474,6 +3753,7 @@ const app = {
         return html;
     },
 
+    /** Find the opponent of a winner in a given match (for upset detection) */
     _getOpponentInMatch(predictions, round, matchIdx, winnerId, players) {
         // For round 0, the two players are seeded: matchIdx*2 + 1 and matchIdx*2 + 2
         if (round === 0) {
@@ -3509,6 +3789,7 @@ const app = {
 
     showFaq() {
         this._closeNav();
+        this._navGen++;
         this.currentView = 'faq';
         this._setActiveNav('navFaq');
         delete document.body.dataset.intensity;
@@ -3517,6 +3798,7 @@ const app = {
         this.render();
     },
 
+    /** Render the FAQ page with expandable question/answer sections */
     renderFaqPage() {
         const sections = [
             {
@@ -3623,6 +3905,7 @@ const app = {
 
     showDonateModal() {
         this._closeNav();
+        this._navGen++;
         this.currentView = 'donate';
         this._setActiveNav('navDonate');
         delete document.body.dataset.intensity;
@@ -3632,12 +3915,14 @@ const app = {
     },
 
     async showLandingStats() {
+        this._navGen++;
         this.currentView = 'stats';
         this._setActiveNav('navStats');
         delete document.body.dataset.intensity;
         document.getElementById('gameContainer').innerHTML = '';
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        window.scrollTo(0, 0);
         this.renderStatsPage();
         await this.checkLockStatus();
         await this.loadActualResults();
@@ -3645,12 +3930,14 @@ const app = {
     },
 
     async showLandingAllBrackets() {
+        this._navGen++;
         this.currentView = 'allBrackets';
         this._setActiveNav('navAllBrackets');
         delete document.body.dataset.intensity;
         document.getElementById('gameContainer').innerHTML = '';
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        window.scrollTo(0, 0);
         this.renderAllBracketsPage();
         await this.checkLockStatus();
         await this.loadActualResults();
@@ -3659,15 +3946,21 @@ const app = {
 
     async showLandingMyBracket() {
         document.querySelector('.landing-nav-links')?.classList.remove('landing-nav-open');
-        document.getElementById('landingPage').style.display = 'none';
-        document.getElementById('mainApp').style.display = 'block';
+        this._navGen++;
+        const navGen = this._navGen;
         this.currentView = 'bracket';
         this.viewingOtherBracket = false;
         UI.showBackToMine(false);
         this._setActiveNav('navMyBracket');
         delete document.body.dataset.intensity;
+        document.getElementById('gameContainer').innerHTML = '';
+        document.getElementById('landingPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        window.scrollTo(0, 0);
         await this.checkLockStatus();
+        if (navGen !== this._navGen) return;
         await this.loadActualResults();
+        if (navGen !== this._navGen) return;
         if (this.userBracketData) {
             this.bracket = { ...this.userBracketData };
             this.gameState = this.isBracketComplete() ? 'bracket-summary' : 'picking';
@@ -3683,6 +3976,7 @@ const app = {
     },
 
     async showLandingLeaderboard() {
+        this._navGen++;
         this.currentView = 'leaderboard';
         this._lbGender = this.currentGender;
         this._setActiveNav('navLeaderboard');
@@ -3691,6 +3985,7 @@ const app = {
         document.getElementById('gameContainer').innerHTML = '';
         document.getElementById('landingPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
+        window.scrollTo(0, 0);
         this.renderLeaderboardPage();
         await this.checkLockStatus();
         await this.loadActualResults();
@@ -3701,6 +3996,7 @@ const app = {
         this.goHome();
     },
 
+    /** Render the donate page with tier options and custom amount input */
     renderDonatePage() {
         const container = document.getElementById('gameContainer');
         container.innerHTML = `
@@ -3792,6 +4088,7 @@ const app = {
 
     // ── Odds toggle ───────────────────────────────────────────
 
+    /** Toggle crowd prediction percentages on/off during bracket picking */
     async toggleOdds() {
         this.showOdds = !this.showOdds;
         if (this.showOdds && !this._oddsCache) {
@@ -3800,6 +4097,7 @@ const app = {
         this.render();
     },
 
+    /** Load all brackets and build a per-round, per-match pick count cache for odds display */
     async _loadOdds() {
         try {
             const snap = await db.collection('brackets-' + this.currentGender).get();

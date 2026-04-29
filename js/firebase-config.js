@@ -1,4 +1,10 @@
-// Firebase configuration & initialization
+/**
+ * Firebase Configuration & Initialization
+ * ────────────────────────────────────────
+ * Uses Firebase compat SDK (v10.7.1) loaded via CDN in index.html.
+ * Credentials are client-side (by design) — security is enforced
+ * by Firestore rules in firestore.rules.
+ */
 const firebaseConfig = {
     apiKey: "AIzaSyBYTFoMl-7yV6knvbHikVHRN8dlbyIil6A",
     authDomain: "kendo-bracket.firebaseapp.com",

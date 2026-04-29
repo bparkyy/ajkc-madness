@@ -1,6 +1,21 @@
-// UI rendering helpers
+/**
+ * UI Rendering Helpers
+ * ────────────────────
+ * Pure HTML template functions. These take data and return HTML strings.
+ * No DOM manipulation or state changes — that's all in app.js.
+ *
+ * Functions:
+ *   escapeHtml()          — Prevent XSS by escaping special characters
+ *   updateAuthUI()        — Toggle admin button visibility
+ *   showBackToMine()      — Toggle "back to my bracket" button
+ *   formatRank()          — Format rank (e.g., "5 Dan" or "6 Dan Renshi")
+ *   renderCardMatchup()   — Card-based matchup view (picking screen)
+ *   renderRoundSummary()  — Round completion screen with winner chips
+ *   renderBracketSummary() — Full bracket overview page with stats + tree
+ */
 
 const UI = {
+    /** Escape HTML special characters to prevent XSS */
     escapeHtml(str) {
         if (typeof str !== 'string') return String(str);
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -25,6 +40,11 @@ const UI = {
 
     // ── Card matchup view ────────────────────────────────────────
 
+    /**
+     * Render the card-based matchup picking screen.
+     * Shows two player cards side-by-side, round tabs, progress bar,
+     * crowd prediction toggle, and prev/next/undo navigation.
+     */
     renderCardMatchup({ player1, player2, roundName, roundNameJp, matchIndex, totalMatches, roundIndex, currentPick, isFirstMatch, odds, showOdds, isFinals, pickHistory }) {
         const progress = ((matchIndex + (currentPick ? 1 : 0)) / totalMatches) * 100;
         const finalsClass = isFinals ? ' finals-matchup' : '';
@@ -74,8 +94,14 @@ const UI = {
 
         const finalsHeader = '';
 
+        const genderTabs = `<div class="bracket-gender-tabs picking-gender-tabs">
+            <button id="menBtn" class="bracket-gender-tab${app.currentGender === 'men' ? ' active' : ''}" onclick="app.switchGender('men')">MENS BRACKET <span style="opacity:0.5;font-size:0.85em;">男子</span></button>
+            <button id="womenBtn" class="bracket-gender-tab${app.currentGender === 'women' ? ' active' : ''}" onclick="app.switchGender('women')">WOMENS BRACKET <span style="opacity:0.5;font-size:0.85em;">女子</span></button>
+        </div>`;
+
         return `
             <div class="game-screen${finalsClass}">
+                ${genderTabs}
                 <div class="round-tabs">${roundTabs}</div>
                 ${finalsHeader}
                 <div class="game-header">
@@ -105,6 +131,11 @@ const UI = {
 
     // ── Round summary view ───────────────────────────────────────
 
+    /**
+     * Render the round completion screen.
+     * Shows a list of advancing winners as animated chips
+     * and a button to continue to the next round.
+     */
     renderRoundSummary({ roundName, roundNameJp, nextRoundName, nextRoundNameJp, picks, isFinalRound }) {
         const winnersHtml = picks.map((p, i) =>
             `<span class="winner-chip" style="animation-delay:${i * 0.04}s">${this.escapeHtml(p.winner)}</span>`
@@ -134,6 +165,13 @@ const UI = {
 
     // ── Bracket summary view ─────────────────────────────────────
 
+    /**
+     * Render the full bracket summary page.
+     * Includes: title, gender tabs, stats bar (correct picks, points, precision),
+     * action buttons (edit/download/share), bracket tree visualization,
+     * and correct/incorrect legend when actual results exist.
+     * Adds 'viewing-other' class when viewing someone else's bracket.
+     */
     renderBracketSummary({ rounds, champion, isReadonly, isComplete, actualResults, viewingName }) {
         // Status label
         const genderLabel = app.currentGender === 'men' ? "MENS BRACKET" : "WOMENS BRACKET";
@@ -249,7 +287,7 @@ const UI = {
         const reminderHtml = '';
 
         return `
-            <div class="bracket-summary">
+            <div class="bracket-summary${isReadonly ? ' viewing-other' : ''}">
                 ${statusLabel}
                 <div class="bracket-page-header">
                     <div>

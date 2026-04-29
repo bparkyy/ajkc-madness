@@ -1,4 +1,18 @@
-// Player data for men's and women's brackets
+/**
+ * Player Data — Men's and Women's AJKC Brackets
+ * ───────────────────────────────────────────────
+ * Each player object has:
+ *   name       — Romanized name (e.g., 'Y.KUROKAWA')
+ *   nameJp     — Japanese name (e.g., '黒川 雄大'), empty string if unknown
+ *   prefecture — Home prefecture
+ *   rank       — Dan rank (number) or 'R6'/'R7' for Renshi
+ *   age        — Age (number or null)
+ *   img        — Optional path to player photo (.webp)
+ *
+ * Players are ordered by bracket seed position (match 0-31).
+ * IDs are assigned sequentially in app.js: buildPlayerLists()
+ * First 32 = left side of bracket, last 32 = right side.
+ */
 
 const menPlayersData = [
     // Left side of bracket (32 players)
