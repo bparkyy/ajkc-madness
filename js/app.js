@@ -367,6 +367,14 @@ const app = {
             if (diff <= 0) {
                 document.getElementById('countdown').innerHTML =
                     '<div class="countdown-label" style="color:var(--kendo-gold);">Tournament has begun! / 大会開催中！</div>';
+                clearInterval(this._countdownInterval);
+                // Auto-lock brackets
+                this.isLocked = true;
+                if (this.currentView === 'bracket') {
+                    const notice = document.getElementById('lockedNotice');
+                    notice.innerHTML = '<span class="locked-icon">🔒</span> TOURNAMENT IN PROGRESS <span class="locked-accent">—</span> BRACKET SUBMISSIONS LOCKED';
+                    notice.style.display = 'block';
+                }
                 return;
             }
             const d = Math.floor(diff / 86400000);
@@ -379,15 +387,16 @@ const app = {
             document.getElementById('cdSecs').textContent = String(s).padStart(2, '0');
         };
         update();
-        setInterval(update, 1000);
+        this._countdownInterval = setInterval(update, 1000);
     },
 
     /** Fetch total bracket count from Firestore and display on landing page */
     async loadLandingStats() {
         try {
+            // Only fetch location field to minimize data transfer
             const [menSnap, womenSnap] = await Promise.all([
-                db.collection('brackets-men').get(),
-                db.collection('brackets-women').get()
+                db.collection('brackets-men').select('location').get(),
+                db.collection('brackets-women').select('location').get()
             ]);
             const total = menSnap.size + womenSnap.size;
             const el = document.getElementById('landingStats');
@@ -603,11 +612,9 @@ const app = {
                     if (!newDoc.exists) {
                         await db.collection('brackets-' + gender).doc(newUid).set(oldDoc.data());
                     }
-                    // Verify write succeeded before deleting old bracket
-                    const verifyDoc = await db.collection('brackets-' + gender).doc(newUid).get();
-                    if (verifyDoc.exists) {
-                        await db.collection('brackets-' + gender).doc(oldUid).delete();
-                    }
+                    // Note: old doc cannot be deleted because Firestore rules require
+                    // request.auth.uid == userId, and our UID has changed after linking.
+                    // Orphaned anonymous docs are harmless and can be cleaned up manually.
                 }
             }
             // Reload bracket for current gender
@@ -827,8 +834,10 @@ const app = {
         if (match) {
             const [, gender, uid] = match;
             window.location.hash = '';
-            // Delay to let the app initialize, then load directly without intermediate render
-            setTimeout(async () => {
+            // Wait for auth to be ready before loading the shared bracket
+            const unsubscribe = auth.onAuthStateChanged(async (user) => {
+                unsubscribe();
+                if (!user) await this.ensureAnonymousAuth();
                 document.getElementById('landingPage').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'block';
                 this.currentView = 'bracket';
@@ -839,7 +848,7 @@ const app = {
                 document.getElementById('womenBtn')?.classList.toggle('active', gender === 'women');
                 await this.checkLockStatus();
                 await this.loadSpecificBracket(uid, gender);
-            }, 300);
+            });
         }
     },
 
@@ -927,7 +936,14 @@ const app = {
             const manualLock = doc.exists ? (doc.data().locked || false) : false;
             const autoLock = new Date() >= this.tournamentDate;
             this.isLocked = manualLock || autoLock;
-            document.getElementById('lockedNotice').style.display = this.isLocked ? 'block' : 'none';
+            // Only show locked notice on bracket view
+            const notice = document.getElementById('lockedNotice');
+            if (this.isLocked && this.currentView === 'bracket') {
+                notice.innerHTML = '<span class="locked-icon">🔒</span> TOURNAMENT IN PROGRESS <span class="locked-accent">—</span> BRACKET SUBMISSIONS LOCKED';
+                notice.style.display = 'block';
+            } else {
+                notice.style.display = 'none';
+            }
         } catch (e) { console.error('Error checking lock status:', e); }
     },
 
@@ -1020,7 +1036,7 @@ const app = {
     },
 
     /** Save the current bracket to Firestore with user's name, location, and ippon prediction */
-    saveBracket() {
+    async saveBracket() {
         if (!this.currentUser) {
             showToast('Something went wrong — please refresh.', 'error');
             return;
@@ -1047,14 +1063,19 @@ const app = {
             return;
         }
 
-        db.collection('brackets-' + this.currentGender).doc(this.currentUser.uid).set({
+        // Collect user's league codes from existing bracket docs
+        const groupCodes = await this._getUserGroupCodes();
+        const saveData = {
             displayName,
             location,
             finalTechnique,
             finalScore,
             predictions: this.bracket,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).then(() => {
+        };
+        if (groupCodes.length > 0) saveData.groupCodes = groupCodes;
+
+        db.collection('brackets-' + this.currentGender).doc(this.currentUser.uid).set(saveData, { merge: true }).then(() => {
             this.userBracketData = { ...this.bracket };
             showToast(`Bracket saved for ${displayName}!`, 'success');
             this.updateBracketCount();
@@ -1487,7 +1508,7 @@ const app = {
                             <option value="">Select ippon...</option>
                             <option value="men"${savedTechnique === 'men' ? ' selected' : ''}>Men (メ)</option>
                             <option value="kote"${savedTechnique === 'kote' ? ' selected' : ''}>Kote (コ)</option>
-                            <option value="dou"${savedTechnique === 'dou' ? ' selected' : ''}>Dou (ド)</option>
+                            <option value="do"${savedTechnique === 'do' ? ' selected' : ''}>Do (ド)</option>
                             <option value="tsuki"${savedTechnique === 'tsuki' ? ' selected' : ''}>Tsuki (ツ)</option>
                             <option value="hansoku"${savedTechnique === 'hansoku' ? ' selected' : ''}>Hansoku (ハンソク)</option>
                         </select>
@@ -1520,7 +1541,7 @@ const app = {
     },
 
     /** Post-finals: validate form inputs and save bracket to Firestore */
-    _postFinalsSubmit() {
+    async _postFinalsSubmit() {
         if (!this.currentUser) {
             showToast('Something went wrong — please refresh.', 'error');
             return;
@@ -1546,13 +1567,18 @@ const app = {
         const userTechEl = document.getElementById('userTechnique');
         if (userTechEl) userTechEl.value = finalTechnique;
 
-        db.collection('brackets-' + this.currentGender).doc(this.currentUser.uid).set({
+        // Collect user's league codes from existing bracket docs
+        const groupCodes = await this._getUserGroupCodes();
+        const saveData = {
             displayName,
             location,
             finalTechnique,
             predictions: this.bracket,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).then(() => {
+        };
+        if (groupCodes.length > 0) saveData.groupCodes = groupCodes;
+
+        db.collection('brackets-' + this.currentGender).doc(this.currentUser.uid).set(saveData, { merge: true }).then(() => {
             this.userBracketData = { ...this.bracket };
             this.updateBracketCount();
             this.promptAccountUpgrade();
@@ -1708,6 +1734,15 @@ const app = {
 
         bracketContainer.style.display = 'none';
         gameContainer.style.display = 'block';
+
+        // Show locked notice only on bracket view
+        const lockedNotice = document.getElementById('lockedNotice');
+        if (this.isLocked && this.currentView === 'bracket') {
+            lockedNotice.innerHTML = '<span class="locked-icon">🔒</span> TOURNAMENT IN PROGRESS <span class="locked-accent">—</span> BRACKET SUBMISSIONS LOCKED';
+            lockedNotice.style.display = 'block';
+        } else {
+            lockedNotice.style.display = 'none';
+        }
 
         // Non-bracket views
         if (this.currentView === 'leaderboard') { this.renderLeaderboardPage(); return; }
@@ -2241,6 +2276,7 @@ const app = {
     _lbPage: 0,
     _lbPageSize: 10,
     _lbScores: [],
+    _lbSearch: '',
 
     /**
      * Fetch all brackets, score them against actual results, sort by points, and render.
@@ -2316,7 +2352,6 @@ const app = {
                 const bTime = b.timestamp?.toMillis?.() || b.timestamp?.seconds * 1000 || Infinity;
                 return aTime - bTime;
             });
-            let rank = 1, prevScore = null;
             scores.forEach((entry, i) => {
                 entry.rank = i + 1;
             });
@@ -2332,20 +2367,11 @@ const app = {
     /** Render the leaderboard page shell with skeleton loading state */
     renderLeaderboardPage() {
         const container = document.getElementById('gameContainer');
-        const groupOptions = this._userGroups.length > 0
-            ? this._userGroups.map(g => `<option value="${UI.escapeHtml(g.code)}"${this._lbGroupCode === g.code ? ' selected' : ''}>${UI.escapeHtml(g.name)}</option>`).join('')
-            : '';
-        const groupFilterHtml = this._userGroups.length > 0
-            ? `<select class="grp-filter-select" onchange="app.filterLeaderboardByGroup(this.value)">
-                    <option value="">GLOBAL</option>
-                    ${groupOptions}
-                </select>`
-            : '';
         container.innerHTML = `
             <div class="page-view">
                 <div class="lb-header">
                     <div>
-                        <h1 class="page-title">LEADERBOARD</h1>
+                        <h1 class="page-title" id="lbTitle">LEADERBOARD</h1>
                         <p class="lb-subtitle">All Japan Kendo Championship Bracket Challenge</p>
                     </div>
                     <div class="lb-tabs">
@@ -2354,7 +2380,7 @@ const app = {
                     </div>
                 </div>
                 <div class="lb-group-bar">
-                    ${groupFilterHtml}
+                    <span id="lbBackToGlobal" style="display:none;"></span>
                     <button class="bracket-action-btn grp-manage-btn" onclick="app.showGroupsModal()">MY LEAGUES</button>
                 </div>
                 <div id="leaderboardContent">
@@ -2397,15 +2423,6 @@ const app = {
                 if (gdoc.exists) groups.push({ code, name: gdoc.data().name || code });
             }
             this._userGroups = groups;
-            // Re-render the group filter bar if leaderboard is still visible
-            if (groups.length > 0 && document.querySelector('.lb-group-bar')) {
-                const groupOptions = groups.map(g => `<option value="${UI.escapeHtml(g.code)}"${this._lbGroupCode === g.code ? ' selected' : ''}>${UI.escapeHtml(g.name)}</option>`).join('');
-                const bar = document.querySelector('.lb-group-bar');
-                const existingSelect = bar.querySelector('.grp-filter-select');
-                if (!existingSelect) {
-                    bar.insertAdjacentHTML('afterbegin', `<select class="grp-filter-select" onchange="app.filterLeaderboardByGroup(this.value)"><option value="">GLOBAL</option>${groupOptions}</select>`);
-                }
-            }
         } catch (e) { console.error('Error loading user groups:', e); }
     },
 
@@ -2474,6 +2491,34 @@ const app = {
             const noRes = scores[0]?.rank === '-';
             if (!noRes) scores.forEach((e, i) => e.rank = i + 1);
         }
+        // Search filter
+        const search = (this._lbSearch || '').trim().toLowerCase();
+        if (search) {
+            scores = scores.filter(e => e.name.toLowerCase().includes(search) || (e.location && e.location.toLowerCase().includes(search)));
+            if (!scores.length) {
+                container.innerHTML = '<p style="text-align:center;color:#666;padding:40px;">No results found.</p>';
+                return;
+            }
+        }
+        // Update title and back-to-global button based on active filter
+        const lbTitle = document.getElementById('lbTitle');
+        const backBtn = document.getElementById('lbBackToGlobal');
+        if (lbTitle) {
+            if (groupCode) {
+                const group = this._userGroups.find(g => g.code === groupCode);
+                lbTitle.textContent = (group ? group.name.toUpperCase() : 'LEAGUE') + ' LEADERBOARD';
+            } else {
+                lbTitle.textContent = 'LEADERBOARD';
+            }
+        }
+        if (backBtn) {
+            if (groupCode) {
+                backBtn.innerHTML = '<button class="bracket-action-btn bracket-action-sm" onclick="app.filterLeaderboardByGroup(null)" style="font-size:0.72em;">← GLOBAL</button>';
+                backBtn.style.display = 'inline';
+            } else {
+                backBtn.style.display = 'none';
+            }
+        }
         const noResults = scores[0]?.rank === '-';
         const _fmtRank = (r) => r === '-' ? '-' : String(r).padStart(2, '0');
         const top3 = scores.slice(0, 3);
@@ -2501,7 +2546,7 @@ const app = {
         };
         const rowsHtml = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
-            return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
+            return `<div class="lb-row${isYou ? ' lb-row-you' : ''}" onclick="app.viewBracketFromLeaderboard('${UI.escapeHtml(entry.uid)}')" style="cursor:pointer;">
                 <span class="lb-row-rank">${_fmtRank(entry.rank)}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
                 <span class="lb-row-correct">${noResults ? '-' : entry.correct + ' / ' + entry.total}</span>
@@ -2511,7 +2556,7 @@ const app = {
         }).join('');
         // Pinned "You" row
         const youEntry = uid ? scores.find(e => e.uid === uid) : null;
-        const youRowHtml = youEntry ? `<div class="lb-row lb-row-you">
+        const youRowHtml = youEntry ? `<div class="lb-row lb-row-you" onclick="app.viewBracketFromLeaderboard('${UI.escapeHtml(youEntry.uid)}')" style="cursor:pointer;">
                 <span class="lb-row-rank">${youEntry.rank === '-' ? '-' : '#' + youEntry.rank}</span>
                 <span class="lb-row-name">You (${UI.escapeHtml(youEntry.name)})${youEntry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(youEntry.location) + '</span>' : ''}</span>
                 <span class="lb-row-correct">${noResults ? '-' : youEntry.correct + ' / ' + youEntry.total}</span>
@@ -2524,6 +2569,7 @@ const app = {
         container.innerHTML = `
             <div class="ad-slot" id="adLeaderboardTop" style="display:none"></div>
             ${noResults ? '' : '<div class="lb-podium">' + podiumHtml + '</div>'}
+            <div style="padding:4px 4px 12px;"><input type="text" class="grp-input lb-search-input" placeholder="Search by name or country..." oninput="app._lbSearch=this.value;app._lbPage=0;app._renderLeaderboard()" value="${UI.escapeHtml(this._lbSearch || '')}" style="width:100%;font-size:0.82em;padding:8px 12px;" /></div>
             ${youRowHtml}
             <div class="lb-table">
                 <div class="lb-table-header"><span>RANK</span><span>NAME</span><span class="lb-row-correct">PICKS</span><span class="lb-row-date">SUBMITTED</span><span>PTS</span></div>
@@ -2546,7 +2592,7 @@ const app = {
         const newRows = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
             const _fmtD = (ts) => { if (!ts) return '\u2014'; const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
-            return `<div class="lb-row${isYou ? ' lb-row-you' : ''}">
+            return `<div class="lb-row${isYou ? ' lb-row-you' : ''}" onclick="app.viewBracketFromLeaderboard('${UI.escapeHtml(entry.uid)}')" style="cursor:pointer;">
                 <span class="lb-row-rank">${entry.rank === '-' ? '-' : String(entry.rank).padStart(2, '0')}</span>
                 <span class="lb-row-name">${UI.escapeHtml(entry.name)}${entry.location ? ' <span class="lb-row-loc">' + UI.escapeHtml(entry.location) + '</span>' : ''}</span>
                 <span class="lb-row-correct">${noResults ? '-' : entry.correct + ' / ' + entry.total}</span>
@@ -2564,6 +2610,9 @@ const app = {
     switchLeaderboardGender(gender) {
         document.getElementById('lbMenTab').classList.toggle('active', gender === 'men');
         document.getElementById('lbWomenTab').classList.toggle('active', gender === 'women');
+        this._lbSearch = '';
+        const searchInput = document.querySelector('.lb-search-input');
+        if (searchInput) searchInput.value = '';
         this.updateLeaderboard(gender);
     },
 
@@ -2875,7 +2924,8 @@ const app = {
 
     async updateBracketCount() {
         try {
-            const snap = await db.collection('brackets-' + this.currentGender).get();
+            // Select no fields — just need the count
+            const snap = await db.collection('brackets-' + this.currentGender).select().get();
             const count = snap.size;
             document.getElementById('bracketCount').textContent =
                 `📊 ${count} Bracket${count !== 1 ? 's' : ''} Submitted`;
@@ -3219,6 +3269,9 @@ const app = {
             html += this._buildPickPopularity("Mens Pick Popularity", menData.pickData, this.menPlayers);
             html += this._buildPickPopularity("Womens Pick Popularity", womenData.pickData, this.womenPlayers);
             html += `</div>`;
+
+            // Country rankings
+            html += this._buildCountryRankings(menSnap, womenSnap, menActualResults, womenActualResults);
 
             // Achievement badges
             html += this._buildAchievements(menSnap, womenSnap, menActualResults, womenActualResults);
@@ -3668,6 +3721,70 @@ const app = {
 
     // ── Achievement Badges ──────────────────────────────────────
 
+    /** Build country rankings: average score by country (min 2 brackets) */
+    _buildCountryRankings(menSnap, womenSnap, menActualResults, womenActualResults) {
+        // Only show if actual results exist
+        const hasResults = (menActualResults && Object.keys(menActualResults).length > 0) ||
+                           (womenActualResults && Object.keys(womenActualResults).length > 0);
+        if (!hasResults) return '';
+
+        const roundPoints = [1, 2, 4, 8, 16, 32];
+        const countryScores = {}; // { country: { totalScore, count } }
+
+        const scoreSnap = (snap, actualResults) => {
+            if (!actualResults || Object.keys(actualResults).length === 0) return;
+            const totalActual = Object.values(actualResults).reduce((s, r) => s + Object.keys(r).length, 0);
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (!data.predictions || !data.location) return;
+                const loc = data.location.trim();
+                if (!loc) return;
+                let score = 0, correct = 0;
+                for (let round = 0; round < 6; round++) {
+                    const userPicks = data.predictions[round] || {};
+                    const actual = actualResults[round] || {};
+                    Object.keys(actual).forEach(m => {
+                        if (userPicks[m] === actual[m]) { score += roundPoints[round]; correct++; }
+                    });
+                }
+                score += correct;
+                if (!countryScores[loc]) countryScores[loc] = { totalScore: 0, count: 0 };
+                countryScores[loc].totalScore += score;
+                countryScores[loc].count++;
+            });
+        };
+
+        scoreSnap(menSnap, menActualResults);
+        scoreSnap(womenSnap, womenActualResults);
+
+        // Filter to countries with at least 2 brackets, sort by avg score
+        const ranked = Object.entries(countryScores)
+            .filter(([, d]) => d.count >= 2)
+            .map(([country, d]) => ({ country, avg: d.totalScore / d.count, count: d.count }))
+            .sort((a, b) => b.avg - a.avg);
+
+        if (ranked.length === 0) return '';
+
+        const maxAvg = ranked[0].avg || 1;
+        const rowsHtml = ranked.map((entry, i) => {
+            const barWidth = Math.max(2, (entry.avg / maxAvg) * 100);
+            return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;${i === 0 ? 'color:var(--kendo-gold);' : ''}">
+                <span style="min-width:24px;font-family:'Bebas Neue',sans-serif;font-size:1.1em;color:rgba(255,255,255,${i === 0 ? '0.9' : '0.3'});">${i + 1}</span>
+                <span style="min-width:100px;font-weight:600;font-size:0.85em;color:${i === 0 ? 'var(--kendo-gold)' : 'rgba(255,255,255,0.8)'};">${UI.escapeHtml(entry.country)}</span>
+                <div style="flex:1;height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden;">
+                    <div style="width:${barWidth}%;height:100%;background:${i === 0 ? 'var(--kendo-gold)' : 'rgba(255,255,255,0.2)'};border-radius:4px;"></div>
+                </div>
+                <span style="min-width:50px;text-align:right;font-family:'Bebas Neue',sans-serif;font-size:1.1em;color:${i === 0 ? 'var(--kendo-gold)' : 'rgba(255,255,255,0.6)'};">${entry.avg.toFixed(1)}</span>
+                <span style="min-width:40px;text-align:right;font-size:0.7em;color:rgba(255,255,255,0.3);">${entry.count} ${entry.count === 1 ? 'bracket' : 'brackets'}</span>
+            </div>`;
+        }).join('');
+
+        return `<div class="stat-section" style="margin-bottom:24px;">
+            <div class="stat-section-title">🌍 COUNTRY RANKINGS <span style="font-size:0.7em;color:rgba(255,255,255,0.3);letter-spacing:1px;">(AVG SCORE, MIN 2 BRACKETS)</span></div>
+            <div style="display:flex;flex-direction:column;">${rowsHtml}</div>
+        </div>`;
+    },
+
     /** Build achievement badges: Early Bird, Contrarian, Upset Caller, Oracle */
     _buildAchievements(menSnap, womenSnap, menActualResults, womenActualResults) {
         const allDocs = [];
@@ -3908,12 +4025,12 @@ const app = {
         const isAdmin = this.isAdmin;
         const groupListHtml = this._userGroups.length > 0
             ? this._userGroups.map(g => `
-                <div class="grp-item">
+                <div class="grp-item" onclick="app._lbGroupCode='${UI.escapeHtml(g.code)}';app.closeGroupsModal();app.showLeaderboard();" style="cursor:pointer;">
                     <div class="grp-item-info">
                         <span class="grp-item-name">${UI.escapeHtml(g.name)}</span>
-                        <span class="grp-item-code" title="Click to copy" onclick="navigator.clipboard.writeText('${UI.escapeHtml(g.code)}');showToast('Code copied!','success');">${UI.escapeHtml(g.code)}</span>
+                        <span class="grp-item-code">${UI.escapeHtml(g.code)}</span>
                     </div>
-                    <div style="display:flex;gap:6px;align-items:center;">
+                    <div style="display:flex;gap:6px;align-items:center;" onclick="event.stopPropagation();">
                         ${isAdmin ? `<button class="grp-leave-btn" onclick="app.deleteLeague('${UI.escapeHtml(g.code)}')" title="Delete league" style="color:rgba(255,100,100,0.4);font-size:1em;">🗑️</button>` : ''}
                         <button class="grp-leave-btn" onclick="app.leaveGroup('${UI.escapeHtml(g.code)}')" title="Leave league">&times;</button>
                     </div>
@@ -4075,6 +4192,21 @@ const app = {
         }
     },
 
+    /** Get the user's league codes from all existing bracket docs (union of both genders) */
+    async _getUserGroupCodes() {
+        if (!this.currentUser) return [];
+        const codesSet = new Set();
+        try {
+            for (const gender of ['men', 'women']) {
+                const doc = await db.collection('brackets-' + gender).doc(this.currentUser.uid).get();
+                if (doc.exists && doc.data().groupCodes) {
+                    doc.data().groupCodes.forEach(c => codesSet.add(c));
+                }
+            }
+        } catch (e) { console.error('Error fetching group codes:', e); }
+        return [...codesSet];
+    },
+
     /** Set leaderboard group filter and refresh */
     filterLeaderboardByGroup(code) {
         this._lbGroupCode = code || null;
@@ -4143,6 +4275,10 @@ const app = {
                             'AJKC Anarchy is a passion project built for the kendo community. It\'s a free bracket prediction game where you pick winners for every match of the All Japan Kendo Championship and compete against fans from around the world.',
                             'It was born from a simple obsession \u2014 the AJKC is my Super Bowl, my World Cup. I have always loved studying the matchups and trying to predict who would win it all that year. Inspired by March Madness-style brackets, I built this as a way for kendo fans everywhere to compete, connect, and share the same excitement that I do.'
                         ]
+                    },
+                    {
+                        q: 'Do I need an account?',
+                        a: 'You can fill out a bracket without an account, but signing in with Google or email ensures your bracket is saved across devices and won\'t be lost if you clear your browser data.'
                     }
                 ]
             },
@@ -4210,19 +4346,6 @@ const app = {
                     {
                         q: 'Do I need an account for leagues?',
                         a: 'Yes, you need to sign in with Google or email to create or join leagues. This ensures your league memberships are saved across devices.'
-                    }
-                ]
-            },
-            {
-                title: 'ACCOUNT',
-                items: [
-                    {
-                        q: 'Do I need an account?',
-                        a: 'You can fill out a bracket without an account, but signing in with Google or email ensures your bracket is saved across devices and won\'t be lost if you clear your browser data.'
-                    },
-                    {
-                        q: 'Who made this?',
-                        a: 'Just another fellow kendo nerd practicing in the USA. Check out my content on Instagram, Youtube, and TikTok! If you enjoy it, consider supporting me on the Donate page!'
                     }
                 ]
             }
@@ -4491,6 +4614,9 @@ window.addEventListener('click', event => {
     }
     if (event.target === document.getElementById('scoringRulesModal')) {
         app.closeScoringRules();
+    }
+    if (event.target === document.getElementById('groupsModal')) {
+        app.closeGroupsModal();
     }
     // Close menu when clicking outside
     const menu = document.getElementById('menuDropdown');

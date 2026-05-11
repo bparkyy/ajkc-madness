@@ -35,7 +35,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Lexend:wght@300;400;500;600;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="css/styles.css?v=3">
+    <link rel="stylesheet" href="css/styles.css?v=4">
 </head>
 <body>
     <!-- ══════ Landing Page ══════ -->
@@ -48,13 +48,9 @@
             <button class="landing-menu-btn" onclick="this.closest('.landing-nav').querySelector('.landing-nav-links').classList.toggle('landing-nav-open')" aria-label="Menu">☰</button>
             <div class="landing-nav-links">
                 <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingMyBracket()" id="landingMyBracket" style="display:none;">MY BRACKET</a>
-                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showFaq()">FAQ</a>
                 <a href="#howToPlay" onclick="this.parentElement.classList.remove('landing-nav-open')">HOW TO PLAY</a>
-                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingLiveBracket()">LIVE BRACKET</a>
-                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingAllBrackets()">VIEW ALL BRACKETS</a>
                 <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingLeaderboard()">LEADERBOARD</a>
-                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showLandingStats()">STATS</a>
-                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showScoringRules()">RULES</a>
+                <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showFaq()">FAQ</a>
                 <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showDonateModal()" class="landing-nav-donate">DONATE</a>
                 <a href="#" onclick="event.preventDefault();this.parentElement.classList.remove('landing-nav-open');app.showSignInModal()" id="landingSignIn" class="landing-nav-signin">SIGN IN</a>
             </div>
@@ -135,12 +131,10 @@
             <button class="mobile-menu-btn" onclick="document.querySelector('.app-nav').classList.toggle('nav-open')">☰</button>
             <nav class="app-nav">
                 <button class="nav-link active" id="navMyBracket" onclick="app.viewMyBracket()">MY BRACKET</button>
-                <button class="nav-link" id="navFaq" onclick="app.showFaq()">FAQ</button>
                 <button class="nav-link" id="navLiveBracket" onclick="app.showLiveBracket()">LIVE BRACKET</button>
-                <button class="nav-link" id="navAllBrackets" onclick="app.viewAllBrackets()">VIEW ALL BRACKETS</button>
                 <button class="nav-link" id="navLeaderboard" onclick="app.showLeaderboard()">LEADERBOARD</button>
                 <button class="nav-link" id="navStats" onclick="app.showStats()">STATS</button>
-                <button class="nav-link" onclick="app.showScoringRules()">RULES</button>
+                <button class="nav-link" id="navFaq" onclick="app.showFaq()">FAQ</button>
                 <button class="nav-link nav-donate" id="navDonate" onclick="app.showDonateModal()">DONATE</button>
             </nav>
             <div class="app-header-right">
@@ -155,9 +149,7 @@
         <input type="hidden" id="userFinalScore" />
         <span id="bracketCount" style="display:none;"></span>
 
-        <div id="lockedNotice" class="locked-notice" style="display: none;">
-            <span class="locked-icon">🔒</span> TOURNAMENT IN PROGRESS <span class="locked-accent">—</span> BRACKET SUBMISSIONS LOCKED
-        </div>
+        <div id="lockedNotice" class="locked-notice" style="display: none;"></div>
 
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
             <span id="modeText"></span>
@@ -303,9 +295,9 @@
     <!-- Offline banner -->
     <div id="offlineBanner" class="offline-banner">You're offline \u2014 changes will sync when reconnected</div>
 
-    <script src="js/firebase-config.js?v=3"></script>
-    <script src="js/data.js?v=3"></script>
-    <script src="js/ui.js?v=3"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/firebase-config.js?v=4"></script>
+    <script src="js/data.js?v=4"></script>
+    <script src="js/ui.js?v=4"></script>
+    <script src="js/app.js?v=4"></script>
 </body>
 </html>

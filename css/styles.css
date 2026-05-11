@@ -1075,29 +1075,15 @@ button.danger:hover {
     flex-wrap: wrap;
 }
 
-.grp-filter-select {
-    padding: 6px 12px;
-    background: var(--surface-2);
-    color: rgba(255,255,255,0.85);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 6px;
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 0.85em;
-    letter-spacing: 1.5px;
-    cursor: pointer;
-    min-width: 140px;
-}
-
-.grp-filter-select:focus {
-    outline: none;
-    border-color: var(--kendo-gold);
-}
-
 .grp-manage-btn {
     font-size: 0.85em !important;
     padding: 8px 18px !important;
     letter-spacing: 1.5px;
     margin-left: auto;
+}
+
+.lb-search-input {
+    font-family: 'Lexend', sans-serif;
 }
 
 /* Groups modal sections */
@@ -1200,11 +1186,10 @@ button.danger:hover {
     font-size: 0.75em;
     color: rgba(255,255,255,0.35);
     letter-spacing: 2px;
-    cursor: pointer;
 }
 
-.grp-item-code:hover {
-    color: var(--kendo-gold);
+.grp-item:hover {
+    border-color: rgba(255,255,255,0.15);
 }
 
 .grp-leave-btn {
@@ -1921,7 +1906,7 @@ button.danger:hover {
 .controversial-pct {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 1.4em;
-    color: var(--kendo-gold);
+    color: rgba(255,255,255,0.6);
 }
 
 .controversial-bar {
@@ -1938,7 +1923,7 @@ button.danger:hover {
 }
 
 .controversial-fill-right {
-    background: rgba(102, 126, 234, 0.5);
+    background: rgba(255,255,255,0.12);
     height: 100%;
 }
 
@@ -3082,12 +3067,17 @@ body.women .winner-chip {
 /* Action buttons */
 .bracket-action-btns {
     display: flex;
-    gap: 12px;
+    gap: 10px;
     flex-shrink: 0;
 }
 
+.bracket-action-secondary {
+    margin-top: 8px;
+    justify-content: center;
+}
+
 .bracket-action-btn {
-    padding: 12px 28px;
+    padding: 10px 22px;
     font-family: 'Bebas Neue', sans-serif;
     font-size: 0.9em;
     letter-spacing: 2px;
@@ -3098,6 +3088,12 @@ body.women .winner-chip {
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
+}
+
+.bracket-action-sm {
+    padding: 7px 14px;
+    font-size: 0.78em;
+    letter-spacing: 1.5px;
 }
 
 .bracket-action-btn:hover {
@@ -4838,8 +4834,9 @@ select.submit-name-input option {
     .bracket-summary { padding: 12px 12px; }
     .bracket-page-header { flex-direction: column; gap: 12px; }
     .bracket-page-title { font-size: 2em; }
-    .bracket-action-btns { width: 100%; gap: 8px; }
-    .bracket-action-btn { width: 100%; text-align: center; font-size: 0.75em; padding: 10px 16px; }
+    .bracket-action-btns { width: 100%; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .bracket-action-btn { text-align: center; font-size: 0.75em; padding: 10px 16px; }
+    .bracket-action-sm { padding: 8px 12px; font-size: 0.72em; flex: 1; }
     .bracket-stats-bar { flex-direction: row; flex-wrap: wrap; }
     .bracket-stats-bar .bracket-stat-card { flex: 1 1 30%; min-width: 0; }
     .bracket-stat-card { padding: 12px 16px; flex: 1; }

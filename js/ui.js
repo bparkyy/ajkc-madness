@@ -253,11 +253,14 @@ const UI = {
         </div>`;
 
         // Action buttons
+        const editLabel = isComplete ? '✏️ EDIT PICKS' : '▶️ RESUME PICKING';
+        const editAction = isComplete ? 'app.startEditing()' : 'app.resumePicking()';
         const actionBtns = !isReadonly
-            ? `<div class="bracket-action-btns">
-                <button class="bracket-action-btn bracket-action-gold" onclick="app.startEditing()">EDIT PICKS</button>
-                <button class="bracket-action-btn" onclick="app.shareBracket()">📸 DOWNLOAD BRACKET</button>
-                <button class="bracket-action-btn bracket-action-share" onclick="app.shareLink()">🔗 SHARE LINK</button>
+            ? `<div class="bracket-action-btns bracket-action-secondary">
+                <button class="bracket-action-btn bracket-action-sm" onclick="${editAction}">${editLabel}</button>
+                <button class="bracket-action-btn bracket-action-sm" onclick="app.shareBracket()">📸 DOWNLOAD</button>
+                <button class="bracket-action-btn bracket-action-sm" onclick="app.shareLink()">🔗 SHARE</button>
+                <button class="bracket-action-btn bracket-action-sm" onclick="app.showGroupsModal()">🏆 MY LEAGUES</button>
             </div>`
             : `<div class="bracket-action-btns">
                 <button class="bracket-action-btn" onclick="app.shareBracket()">📸 DOWNLOAD BRACKET</button>
@@ -272,10 +275,6 @@ const UI = {
 
         const incompleteHtml = !isComplete && !isReadonly
             ? '<div class="bracket-incomplete-notice">⚠️ Your bracket is not complete yet.</div>'
-            : '';
-
-        const resumeHtml = !isComplete && !isReadonly
-            ? '<div style="text-align:center;margin-bottom:20px"><button class="bracket-action-btn" onclick="app.resumePicking()">▶️ Resume Picking</button></div>'
             : '';
 
         const nameHtml = '';
@@ -302,7 +301,6 @@ const UI = {
                 ${nameHtml}
                 ${reminderHtml}
                 ${incompleteHtml}
-                ${resumeHtml}
                 <div style="text-align:center">${legendHtml}</div>
                 ${bracketVisualHtml}
                 <!-- Ad slot: Below bracket tree -->
