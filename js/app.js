@@ -55,6 +55,7 @@
  *   settings/tournament     — Lock status
  *   settings/actualTechnique-{gender} — Final ippon technique
  *   admins/{email}          — Admin whitelist
+ *   groups/{code}           — Leagues (name, createdBy, createdAt)
  *
  * BRACKET DATA STRUCTURE
  * ──────────────────────
@@ -1053,7 +1054,7 @@ const app = {
             finalScore,
             predictions: this.bracket,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => {
+        }, { merge: true }).then(() => {
             this.userBracketData = { ...this.bracket };
             showToast(`Bracket saved for ${displayName}!`, 'success');
             this.updateBracketCount();
@@ -1551,7 +1552,7 @@ const app = {
             finalTechnique,
             predictions: this.bracket,
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => {
+        }, { merge: true }).then(() => {
             this.userBracketData = { ...this.bracket };
             this.updateBracketCount();
             this.promptAccountUpgrade();
@@ -1631,6 +1632,14 @@ const app = {
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
             this.actualResults = { ...this.bracket };
+            // Also save final ippon technique if set
+            const technique = document.getElementById('adminTechnique')?.value || '';
+            const score = document.getElementById('adminFinalScore')?.value || '';
+            await db.collection('settings').doc('actualTechnique-' + this.currentGender).set({
+                technique,
+                score,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
             this.updateLeaderboard();
             showToast('Results saved!', 'success');
         } catch (e) {
@@ -2257,7 +2266,7 @@ const app = {
                 snap.forEach(doc => {
                     const data = doc.data();
                     if (!data.predictions) return;
-                    entries.push({ uid: doc.id, name: data.displayName || doc.id, score: '-', correct: 0, total: 0, location: data.location || '', techniqueBonus: 0, timestamp: data.timestamp, rank: '-' });
+                    entries.push({ uid: doc.id, name: data.displayName || doc.id, score: '-', correct: 0, total: 0, location: data.location || '', techniqueBonus: 0, timestamp: data.timestamp, rank: '-', groupCodes: data.groupCodes || [] });
                 });
                 entries.sort((a, b) => {
                     const aTime = a.timestamp?.toMillis?.() || a.timestamp?.seconds * 1000 || Infinity;
@@ -2298,7 +2307,7 @@ const app = {
                 const techniqueBonus = actualTechnique && data.finalTechnique === actualTechnique ? 5 : 0;
                 const perfectBonus = (correct === totalActual && totalActual > 0) ? 50 : 0;
                 score += techniqueBonus + correct + perfectBonus;
-                scores.push({ uid: doc.id, name: data.displayName || doc.id, score, correct, total: totalActual, location: data.location || '', techniqueBonus, timestamp: data.timestamp });
+                scores.push({ uid: doc.id, name: data.displayName || doc.id, score, correct, total: totalActual, location: data.location || '', techniqueBonus, timestamp: data.timestamp, groupCodes: data.groupCodes || [] });
             });
             // Sort: total points desc (includes technique bonus), then earlier submission
             scores.sort((a, b) => {
@@ -2323,6 +2332,15 @@ const app = {
     /** Render the leaderboard page shell with skeleton loading state */
     renderLeaderboardPage() {
         const container = document.getElementById('gameContainer');
+        const groupOptions = this._userGroups.length > 0
+            ? this._userGroups.map(g => `<option value="${UI.escapeHtml(g.code)}"${this._lbGroupCode === g.code ? ' selected' : ''}>${UI.escapeHtml(g.name)}</option>`).join('')
+            : '';
+        const groupFilterHtml = this._userGroups.length > 0
+            ? `<select class="grp-filter-select" onchange="app.filterLeaderboardByGroup(this.value)">
+                    <option value="">GLOBAL</option>
+                    ${groupOptions}
+                </select>`
+            : '';
         container.innerHTML = `
             <div class="page-view">
                 <div class="lb-header">
@@ -2334,6 +2352,10 @@ const app = {
                         <button class="lb-tab${(this._lbGender || this.currentGender) === 'men' ? ' active' : ''}" onclick="app.switchLeaderboardGender('men')" id="lbMenTab">MENS AJKC</button>
                         <button class="lb-tab${(this._lbGender || this.currentGender) === 'women' ? ' active' : ''}" onclick="app.switchLeaderboardGender('women')" id="lbWomenTab">WOMENS AJKC</button>
                     </div>
+                </div>
+                <div class="lb-group-bar">
+                    ${groupFilterHtml}
+                    <button class="bracket-action-btn grp-manage-btn" onclick="app.showGroupsModal()">MY LEAGUES</button>
                 </div>
                 <div id="leaderboardContent">
                     <div class="skeleton-podium">
@@ -2354,6 +2376,37 @@ const app = {
         this.updateLeaderboard();
         this._startLeaderboardListener();
         this._initPullToRefresh('leaderboardContent', () => this.updateLeaderboard());
+        this._loadUserGroupsSilent();
+    },
+
+    /** Load user's groups in background (for leaderboard filter dropdown) */
+    async _loadUserGroupsSilent() {
+        if (!this.currentUser || this.currentUser.isAnonymous) return;
+        if (this._userGroups.length > 0) return; // already loaded
+        try {
+            const codesSet = new Set();
+            for (const gender of ['men', 'women']) {
+                const doc = await db.collection('brackets-' + gender).doc(this.currentUser.uid).get();
+                if (doc.exists && doc.data().groupCodes) {
+                    doc.data().groupCodes.forEach(c => codesSet.add(c));
+                }
+            }
+            const groups = [];
+            for (const code of codesSet) {
+                const gdoc = await db.collection('groups').doc(code).get();
+                if (gdoc.exists) groups.push({ code, name: gdoc.data().name || code });
+            }
+            this._userGroups = groups;
+            // Re-render the group filter bar if leaderboard is still visible
+            if (groups.length > 0 && document.querySelector('.lb-group-bar')) {
+                const groupOptions = groups.map(g => `<option value="${UI.escapeHtml(g.code)}"${this._lbGroupCode === g.code ? ' selected' : ''}>${UI.escapeHtml(g.name)}</option>`).join('');
+                const bar = document.querySelector('.lb-group-bar');
+                const existingSelect = bar.querySelector('.grp-filter-select');
+                if (!existingSelect) {
+                    bar.insertAdjacentHTML('afterbegin', `<select class="grp-filter-select" onchange="app.filterLeaderboardByGroup(this.value)"><option value="">GLOBAL</option>${groupOptions}</select>`);
+                }
+            }
+        } catch (e) { console.error('Error loading user groups:', e); }
     },
 
     /** Add pull-to-refresh touch gesture to a scrollable container */
@@ -2406,10 +2459,21 @@ const app = {
 
     /** Render leaderboard content: podium (top 3) + paginated table + pinned "You" row */
     _renderLeaderboard() {
-        const scores = this._lbScores;
+        let scores = this._lbScores;
         const uid = this.currentUser?.uid;
         const container = document.getElementById('leaderboardContent');
         if (!scores.length) { container.innerHTML = '<p style="text-align:center;color:#666;padding:40px;">No data</p>'; return; }
+        // Group filter: narrow to group members and re-rank
+        const groupCode = this._lbGroupCode;
+        if (groupCode) {
+            scores = scores.filter(e => e.groupCodes && e.groupCodes.includes(groupCode));
+            if (!scores.length) {
+                container.innerHTML = '<p style="text-align:center;color:#666;padding:40px;">No league members have submitted brackets yet.</p>';
+                return;
+            }
+            const noRes = scores[0]?.rank === '-';
+            if (!noRes) scores.forEach((e, i) => e.rank = i + 1);
+        }
         const noResults = scores[0]?.rank === '-';
         const _fmtRank = (r) => r === '-' ? '-' : String(r).padStart(2, '0');
         const top3 = scores.slice(0, 3);
@@ -2471,11 +2535,14 @@ const app = {
     /** Append next page of leaderboard rows and update load-more button */
     _lbLoadMore() {
         this._lbPage++;
+        let allScores = this._lbScores;
+        const groupCode = this._lbGroupCode;
+        if (groupCode) allScores = allScores.filter(e => e.groupCodes && e.groupCodes.includes(groupCode));
         const start = this._lbPage * this._lbPageSize;
-        const pageEntries = this._lbScores.slice(start, start + this._lbPageSize);
+        const pageEntries = allScores.slice(start, start + this._lbPageSize);
         const uid = this.currentUser?.uid;
-        const hasMore = start + this._lbPageSize < this._lbScores.length;
-        const noResults = this._lbScores[0]?.rank === '-';
+        const hasMore = start + this._lbPageSize < allScores.length;
+        const noResults = allScores[0]?.rank === '-';
         const newRows = pageEntries.map(entry => {
             const isYou = entry.uid === uid;
             const _fmtD = (ts) => { if (!ts) return '\u2014'; const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
@@ -3772,6 +3839,264 @@ const app = {
         return winnerId === p1Id ? p2Id : p1Id;
     },
 
+    // ── Leagues ─────────────────────────────────────────────────
+
+    _userGroups: [],      // Array of { code, name } for current user
+    _lbGroupCode: null,   // Currently selected group filter on leaderboard (null = global)
+    _lastCreatedCode: null, // Last created league code (for display in modal)
+
+    /** Generate a 6-char alphanumeric code (no ambiguous chars) */
+    _generateGroupCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+        return code;
+    },
+
+    /** Open the groups modal */
+    async showGroupsModal() {
+        this._closeNav();
+        const user = this.currentUser;
+        if (!user || user.isAnonymous) {
+            showToast('Sign in with Google or email to use leagues.', 'error');
+            this.showSignInModal();
+            return;
+        }
+        document.getElementById('groupsModal').style.display = 'block';
+        lockBodyScroll();
+        this._lastCreatedCode = null;
+        await this._loadAndRenderGroups();
+    },
+
+    closeGroupsModal() {
+        document.getElementById('groupsModal').style.display = 'none';
+        unlockBodyScroll();
+    },
+
+    /** Load user's groupCodes from both bracket docs, fetch group names, render modal */
+    async _loadAndRenderGroups() {
+        const content = document.getElementById('groupsContent');
+        content.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.4);padding:20px;">Loading...</p>';
+        try {
+            // Gather groupCodes from both gender bracket docs
+            const codesSet = new Set();
+            for (const gender of ['men', 'women']) {
+                const doc = await db.collection('brackets-' + gender).doc(this.currentUser.uid).get();
+                if (doc.exists && doc.data().groupCodes) {
+                    doc.data().groupCodes.forEach(c => codesSet.add(c));
+                }
+            }
+            // Fetch group details
+            const groups = [];
+            for (const code of codesSet) {
+                const gdoc = await db.collection('groups').doc(code).get();
+                if (gdoc.exists) {
+                    groups.push({ code, name: gdoc.data().name || code });
+                }
+            }
+            this._userGroups = groups;
+            this._renderGroupsModal();
+        } catch (e) {
+            console.error('Error loading groups:', e);
+            content.innerHTML = '<p style="text-align:center;color:#f00;padding:20px;">Error loading leagues.</p>';
+        }
+    },
+
+    /** Render groups modal content */
+    _renderGroupsModal() {
+        const content = document.getElementById('groupsContent');
+        const isAdmin = this.isAdmin;
+        const groupListHtml = this._userGroups.length > 0
+            ? this._userGroups.map(g => `
+                <div class="grp-item">
+                    <div class="grp-item-info">
+                        <span class="grp-item-name">${UI.escapeHtml(g.name)}</span>
+                        <span class="grp-item-code" title="Click to copy" onclick="navigator.clipboard.writeText('${UI.escapeHtml(g.code)}');showToast('Code copied!','success');">${UI.escapeHtml(g.code)}</span>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        ${isAdmin ? `<button class="grp-leave-btn" onclick="app.deleteLeague('${UI.escapeHtml(g.code)}')" title="Delete league" style="color:rgba(255,100,100,0.4);font-size:1em;">🗑️</button>` : ''}
+                        <button class="grp-leave-btn" onclick="app.leaveGroup('${UI.escapeHtml(g.code)}')" title="Leave league">&times;</button>
+                    </div>
+                </div>`).join('')
+            : '<p style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.85em;padding:12px 0;">You haven\'t joined any leagues yet.</p>';
+
+        const codeResultHtml = this._lastCreatedCode
+            ? `<div class="grp-code-result">
+                    <p style="color:rgba(255,255,255,0.5);font-size:0.8em;margin-bottom:4px;">Share this code with your league:</p>
+                    <span class="grp-code-display" onclick="navigator.clipboard.writeText('${this._lastCreatedCode}');showToast('Code copied!','success');">${this._lastCreatedCode}</span>
+                </div>`
+            : '';
+
+        content.innerHTML = `
+            <div class="grp-section">
+                <h3 class="grp-section-title">CREATE A LEAGUE</h3>
+                <div class="grp-form">
+                    <input type="text" id="grpCreateName" class="grp-input" placeholder="League name" maxlength="40" />
+                    <button class="bracket-action-btn" onclick="app.createGroup()">CREATE</button>
+                </div>
+                ${codeResultHtml}
+            </div>
+            <div class="grp-section">
+                <h3 class="grp-section-title">JOIN A LEAGUE</h3>
+                <div class="grp-form">
+                    <input type="text" id="grpJoinCode" class="grp-input" placeholder="Enter 6-character code" maxlength="6" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace;" />
+                    <button class="bracket-action-btn" onclick="app.joinGroup()">JOIN</button>
+                </div>
+            </div>
+            <div class="grp-section">
+                <h3 class="grp-section-title">YOUR LEAGUES</h3>
+                <div class="grp-list">${groupListHtml}</div>
+            </div>
+            ${isAdmin ? '<div class="grp-section"><h3 class="grp-section-title">ALL LEAGUES (ADMIN)</h3><div id="grpAllLeagues"><p style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.85em;padding:12px 0;">Loading...</p></div></div>' : ''}`;
+        if (isAdmin) this._loadAllLeagues();
+    },
+
+    /** Admin: load all leagues from Firestore */
+    async _loadAllLeagues() {
+        const container = document.getElementById('grpAllLeagues');
+        if (!container) return;
+        try {
+            const snap = await db.collection('groups').get();
+            if (snap.empty) {
+                container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.85em;padding:12px 0;">No leagues exist yet.</p>';
+                return;
+            }
+            const html = [];
+            snap.forEach(doc => {
+                const d = doc.data();
+                html.push(`<div class="grp-item">
+                    <div class="grp-item-info">
+                        <span class="grp-item-name">${UI.escapeHtml(d.name || doc.id)}</span>
+                        <span class="grp-item-code" title="Click to copy" onclick="navigator.clipboard.writeText('${UI.escapeHtml(doc.id)}');showToast('Code copied!','success');">${UI.escapeHtml(doc.id)}</span>
+                        <span style="font-size:0.7em;color:rgba(255,255,255,0.2);">by ${UI.escapeHtml(d.createdByName || 'unknown')}</span>
+                    </div>
+                    <button class="grp-leave-btn" onclick="app.deleteLeague('${UI.escapeHtml(doc.id)}')" title="Delete league" style="color:rgba(255,100,100,0.4);font-size:1em;">🗑️</button>
+                </div>`);
+            });
+            container.innerHTML = `<div class="grp-list">${html.join('')}</div>`;
+        } catch (e) {
+            console.error('Error loading all leagues:', e);
+            container.innerHTML = '<p style="text-align:center;color:#f00;font-size:0.85em;">Error loading leagues.</p>';
+        }
+    },
+
+    /** Create a new private group */
+    async createGroup() {
+        const nameInput = document.getElementById('grpCreateName');
+        const name = nameInput ? nameInput.value.trim() : '';
+        if (!name) { showToast('Please enter a league name.', 'error'); nameInput?.focus(); return; }
+        if (!this.currentUser || this.currentUser.isAnonymous) {
+            showToast('Sign in to create a league.', 'error'); return;
+        }
+        try {
+            // Generate unique code (retry on collision)
+            let code, attempts = 0;
+            do {
+                code = this._generateGroupCode();
+                const existing = await db.collection('groups').doc(code).get();
+                if (!existing.exists) break;
+                attempts++;
+            } while (attempts < 10);
+            if (attempts >= 10) { showToast('Could not generate a unique code. Try again.', 'error'); return; }
+
+            await db.collection('groups').doc(code).set({
+                name,
+                createdBy: this.currentUser.uid,
+                createdByName: this.currentUser.email || '',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            // Add to user's bracket docs
+            await this._addGroupCodeToBrackets(code);
+            this._userGroups.push({ code, name });
+            this._lastCreatedCode = code;
+            this._renderGroupsModal();
+            showToast('League created!', 'success');
+        } catch (e) {
+            console.error('Error creating league:', e);
+            showToast('Error creating league: ' + e.message, 'error');
+        }
+    },
+
+    /** Join an existing group by code */
+    async joinGroup() {
+        const codeInput = document.getElementById('grpJoinCode');
+        const code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+        if (!code || code.length !== 6) { showToast('Please enter a valid 6-character code.', 'error'); codeInput?.focus(); return; }
+        if (!this.currentUser || this.currentUser.isAnonymous) {
+            showToast('Sign in to join a league.', 'error'); return;
+        }
+        if (this._userGroups.some(g => g.code === code)) {
+            showToast('You\'re already in this league!', 'error'); return;
+        }
+        try {
+            const gdoc = await db.collection('groups').doc(code).get();
+            if (!gdoc.exists) { showToast('League not found. Check the code and try again.', 'error'); return; }
+            await this._addGroupCodeToBrackets(code);
+            this._userGroups.push({ code, name: gdoc.data().name || code });
+            this._renderGroupsModal();
+            showToast(`Joined "${gdoc.data().name}"!`, 'success');
+        } catch (e) {
+            console.error('Error joining group:', e);
+            showToast('Error joining league: ' + e.message, 'error');
+        }
+    },
+
+    /** Leave a group (remove code from bracket docs) */
+    async leaveGroup(code) {
+        if (!this.currentUser) return;
+        try {
+            for (const gender of ['men', 'women']) {
+                const ref = db.collection('brackets-' + gender).doc(this.currentUser.uid);
+                const doc = await ref.get();
+                if (doc.exists && doc.data().groupCodes) {
+                    const updated = doc.data().groupCodes.filter(c => c !== code);
+                    await ref.update({ groupCodes: updated });
+                }
+            }
+            this._userGroups = this._userGroups.filter(g => g.code !== code);
+            // If this was the active leaderboard filter, reset to global
+            if (this._lbGroupCode === code) this._lbGroupCode = null;
+            this._renderGroupsModal();
+            showToast('Left league.', 'success');
+        } catch (e) {
+            console.error('Error leaving group:', e);
+            showToast('Error leaving league: ' + e.message, 'error');
+        }
+    },
+
+    /** Add a group code to the user's bracket docs (both genders, using arrayUnion) */
+    async _addGroupCodeToBrackets(code) {
+        for (const gender of ['men', 'women']) {
+            const ref = db.collection('brackets-' + gender).doc(this.currentUser.uid);
+            const doc = await ref.get();
+            if (doc.exists) {
+                await ref.update({ groupCodes: firebase.firestore.FieldValue.arrayUnion(code) });
+            }
+        }
+    },
+
+    /** Set leaderboard group filter and refresh */
+    filterLeaderboardByGroup(code) {
+        this._lbGroupCode = code || null;
+        this._lbPage = 0;
+        this._renderLeaderboard();
+    },
+
+    /** Admin: delete a league entirely */
+    async deleteLeague(code) {
+        if (!this.isAdmin) { showToast('Admin only.', 'error'); return; }
+        if (!confirm('Delete this league for everyone? This cannot be undone.')) return;
+        try {
+            await db.collection('groups').doc(code).delete();
+            // Also remove from own brackets
+            await this.leaveGroup(code);
+            showToast('League deleted.', 'success');
+        } catch (e) {
+            console.error('Error deleting league:', e);
+            showToast('Error deleting league: ' + e.message, 'error');
+        }
+    },
+
     // ── Scoring Rules ───────────────────────────────────────────
 
     showScoringRules() {
@@ -3860,6 +4185,31 @@ const app = {
                     {
                         q: 'How are ties broken?',
                         a: 'If two players have the same score, the tiebreaker goes to whoever submitted their bracket earlier.'
+                    }
+                ]
+            },
+            {
+                title: 'LEAGUES',
+                items: [
+                    {
+                        q: 'What are leagues?',
+                        a: 'Leagues let you create your own mini-leaderboard with friends, your dojo, or any group. Create a league, share the code, and everyone who joins can see how they rank against each other.'
+                    },
+                    {
+                        q: 'How do I create a league?',
+                        a: 'Go to the Leaderboard page and click the "MY LEAGUES" button. Enter a league name and click "CREATE". You\'ll get a 6-character code to share with your league.'
+                    },
+                    {
+                        q: 'How do I join a league?',
+                        a: 'Go to the Leaderboard page, click "MY LEAGUES", and enter the 6-character code in the "Join a League" section. You\'ll immediately be added to that league\'s leaderboard.'
+                    },
+                    {
+                        q: 'Can I be in multiple leagues?',
+                        a: 'Yes! You can join as many leagues as you want. Use the dropdown on the Leaderboard page to switch between your league leaderboards and the global rankings.'
+                    },
+                    {
+                        q: 'Do I need an account for leagues?',
+                        a: 'Yes, you need to sign in with Google or email to create or join leagues. This ensures your league memberships are saved across devices.'
                     }
                 ]
             },

@@ -1064,6 +1064,163 @@ button.danger:hover {
 .lb-tab:hover { color: rgba(255,255,255,0.7); }
 .lb-tab.active { color: var(--kendo-gold); border-bottom-color: var(--kendo-gold); }
 
+/* ── Private Groups ──────────────────────────────────── */
+
+/* Leaderboard group bar */
+.lb-group-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0 14px;
+    flex-wrap: wrap;
+}
+
+.grp-filter-select {
+    padding: 6px 12px;
+    background: var(--surface-2);
+    color: rgba(255,255,255,0.85);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.85em;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    min-width: 140px;
+}
+
+.grp-filter-select:focus {
+    outline: none;
+    border-color: var(--kendo-gold);
+}
+
+.grp-manage-btn {
+    font-size: 0.85em !important;
+    padding: 8px 18px !important;
+    letter-spacing: 1.5px;
+    margin-left: auto;
+}
+
+/* Groups modal sections */
+.grp-section {
+    margin-bottom: 24px;
+}
+
+.grp-section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.9em;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding-bottom: 6px;
+}
+
+.grp-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.grp-input {
+    flex: 1;
+    min-width: 140px;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.grp-input:focus {
+    outline: none;
+    border-color: var(--kendo-gold);
+}
+
+.grp-input::placeholder {
+    color: rgba(255,255,255,0.25);
+}
+
+/* Group code result display */
+.grp-code-result {
+    margin-top: 12px;
+    padding: 12px;
+    background: rgba(212,168,67,0.08);
+    border: 1px solid rgba(212,168,67,0.2);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.grp-code-display {
+    font-family: monospace;
+    font-size: 1.4em;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--kendo-gold);
+    cursor: pointer;
+    user-select: all;
+}
+
+.grp-code-display:hover {
+    opacity: 0.8;
+}
+
+/* Group list items */
+.grp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.grp-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+}
+
+.grp-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.grp-item-name {
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+    font-size: 0.95em;
+}
+
+.grp-item-code {
+    font-family: monospace;
+    font-size: 0.75em;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 2px;
+    cursor: pointer;
+}
+
+.grp-item-code:hover {
+    color: var(--kendo-gold);
+}
+
+.grp-leave-btn {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.2);
+    font-size: 1.4em;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.grp-leave-btn:hover {
+    color: #e06060;
+}
+
 /* Podium */
 .lb-podium {
     display: flex;
@@ -1269,14 +1426,28 @@ button.danger:hover {
 /* bracketCount is now styled via .bracket-count-badge */
 
 .locked-notice {
-    background: rgba(243, 156, 18, 0.1);
-    border: 2px solid rgba(243, 156, 18, 0.3);
-    padding: 15px;
+    background: var(--surface-2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 14px 20px;
     border-radius: 8px;
     margin-bottom: 20px;
     text-align: center;
-    font-weight: 600;
-    color: #f39c12;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.95em;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.locked-notice .locked-icon {
+    font-size: 1.1em;
+}
+
+.locked-notice .locked-accent {
+    color: var(--kendo-gold);
 }
 
 /* ── Modal ── */

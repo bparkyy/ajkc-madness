@@ -111,8 +111,8 @@
                     </div>
                     <div class="htp-card">
                         <span class="htp-num">03</span>
-                        <h3>PREDICT <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">予測</span></h3>
-                        <p>Make your predictions until the tournament, when the results will determine the final bracket.</p>
+                        <h3>COMPETE <span style="color:rgba(255,255,255,0.3);font-size:0.7em;">競争</span></h3>
+                        <p>Create a league, share the code with friends, and compete on your own leaderboard.</p>
                     </div>
                     <div class="htp-card htp-card-highlight">
                         <span class="htp-num">04</span>
@@ -156,7 +156,7 @@
         <span id="bracketCount" style="display:none;"></span>
 
         <div id="lockedNotice" class="locked-notice" style="display: none;">
-            🔒 Tournament has started! Bracket submissions are now locked.
+            <span class="locked-icon">🔒</span> TOURNAMENT IN PROGRESS <span class="locked-accent">—</span> BRACKET SUBMISSIONS LOCKED
         </div>
 
         <div id="modeIndicator" class="mode-indicator" style="display: none;">
@@ -178,7 +178,6 @@
                 <option value="tsuki">Tsuki</option>
                 <option value="hansoku">Hansoku</option>
             </select>
-            <button onclick="app.saveActualTechnique()" style="margin-left:4px;">Save Final</button>
         </div>
 
         <!-- Full-screen game area -->
@@ -284,6 +283,17 @@
                 <span class="close" onclick="app.closeSignInModal()">&times;</span>
             </div>
             <div id="signInContent"></div>
+        </div>
+    </div>
+
+    <!-- Leagues modal -->
+    <div id="groupsModal" class="modal">
+        <div class="modal-content" style="max-width:500px;">
+            <div class="modal-header">
+                <h2 style="font-family:'Bebas Neue',sans-serif;letter-spacing:3px;">LEAGUES <span style="color:var(--kendo-gold);font-size:0.7em;">リーグ</span></h2>
+                <span class="close" onclick="app.closeGroupsModal()">&times;</span>
+            </div>
+            <div id="groupsContent"></div>
         </div>
     </div>
 
